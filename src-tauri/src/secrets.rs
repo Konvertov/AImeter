@@ -72,22 +72,66 @@ pub fn api_key(info: &Info) -> Option<String> {
             return Some(value);
         }
     }
-    keyring::Entry::new(VAULT, info.id)
-        .ok()?
-        .get_password()
-        .ok()
-        .map(|key| key.trim().to_string())
-        .filter(|key| !key.is_empty())
+    stored(info.id).map(|key| key.trim().to_string())
 }
 
-pub fn save_api_key(id: &str, key: &str) -> Result<(), String> {
-    let entry = keyring::Entry::new(VAULT, id).map_err(|e| e.to_string())?;
-    if key.trim().is_empty() {
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    } else {
-        entry.set_password(key.trim()).map_err(|e| e.to_string())
+/// Windows keeps at most about 1280 characters per saved secret, and a
+/// browser session is longer, so long values are saved in pieces:
+/// the main entry says "pieces:N" and entries "id#0".."id#N-1" hold the text.
+const PIECE: usize = 1000;
+const PIECES_MARK: &str = "pieces:";
+
+fn entry(name: &str) -> Option<keyring::Entry> {
+    keyring::Entry::new(VAULT, name).ok()
+}
+
+fn remove(name: &str) -> Result<(), String> {
+    match entry(name).ok_or("password store unavailable")?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
     }
+}
+
+/// A secret AImeter itself saved earlier under this service id.
+pub fn stored(id: &str) -> Option<String> {
+    let head = entry(id)?.get_password().ok()?;
+    let value = match head.strip_prefix(PIECES_MARK).and_then(|n| n.parse::<usize>().ok()) {
+        Some(count) => {
+            let mut whole = String::new();
+            for index in 0..count {
+                whole.push_str(&entry(&format!("{id}#{index}"))?.get_password().ok()?);
+            }
+            whole
+        }
+        None => head,
+    };
+    (!value.trim().is_empty()).then_some(value)
+}
+
+/// Save (or, with an empty value, remove) a secret under this service id.
+pub fn save_api_key(id: &str, key: &str) -> Result<(), String> {
+    // Clear what was there before, including pieces of a longer value.
+    if let Some(old) = entry(id).and_then(|e| e.get_password().ok()) {
+        if let Some(count) = old.strip_prefix(PIECES_MARK).and_then(|n| n.parse::<usize>().ok()) {
+            for index in 0..count {
+                remove(&format!("{id}#{index}"))?;
+            }
+        }
+    }
+    let key = key.trim();
+    if key.is_empty() {
+        return remove(id);
+    }
+    let write = |name: &str, text: &str| -> Result<(), String> {
+        entry(name).ok_or("password store unavailable")?.set_password(text).map_err(|e| e.to_string())
+    };
+    let letters: Vec<char> = key.chars().collect();
+    if letters.len() <= PIECE {
+        return write(id, key);
+    }
+    let pieces: Vec<String> = letters.chunks(PIECE).map(|part| part.iter().collect()).collect();
+    for (index, piece) in pieces.iter().enumerate() {
+        write(&format!("{id}#{index}"), piece)?;
+    }
+    write(id, &format!("{PIECES_MARK}{}", pieces.len()))
 }

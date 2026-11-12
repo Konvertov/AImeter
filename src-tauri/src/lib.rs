@@ -1,8 +1,10 @@
 mod providers;
 mod secrets;
+mod signin;
+mod updates;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -17,16 +19,24 @@ const REFRESH_EVERY: Duration = Duration::from_secs(5 * 60);
 /// How long a service is left alone after it asked us to slow down.
 const SLOW_DOWN_MS: i64 = 20 * 60 * 1000;
 
-struct Shared {
-    client: reqwest::Client,
+pub(crate) struct Shared {
+    pub(crate) client: reqwest::Client,
     snapshots: Mutex<Vec<Snapshot>>,
     /// Service id -> time (ms) before which it must not be asked again.
     quiet_until: Mutex<HashMap<String, i64>>,
     busy: tokio::sync::Mutex<()>,
     hidden_at: AtomicI64,
+    /// The user prefers "how much is left" over "how much is spent".
+    show_left: AtomicBool,
+    /// When a Gemini session was last renewed quietly (ms), to not do it in a loop.
+    renewed_at: AtomicI64,
+    /// Service whose limit is shown next to the icon; None = the tightest of all.
+    tray_service: Mutex<Option<String>>,
+    /// The user may switch automatic updates off in Settings.
+    pub(crate) auto_update: AtomicBool,
 }
 
-async fn refresh(app: AppHandle) {
+pub(crate) async fn refresh(app: AppHandle) {
     let shared = app.state::<Shared>();
     let Ok(_guard) = shared.busy.try_lock() else {
         return; // a refresh is already running
@@ -72,6 +82,7 @@ async fn refresh(app: AppHandle) {
                     if let Some(old) = old.filter(|o| !o.meters.is_empty()) {
                         new.meters = old.meters;
                         new.plan = old.plan;
+                        new.account = old.account;
                         new.fetched_at = old.fetched_at;
                     }
                 }
@@ -81,6 +92,14 @@ async fn refresh(app: AppHandle) {
         }
     }
 
+    // An expired Gemini session can often be renewed without the user: the
+    // built-in browser still remembers the sign-in. Try at most once an hour.
+    let gemini_expired = result.iter().any(|s| s.id == "gemini" && s.state == "expired");
+    if gemini_expired && now - shared.renewed_at.load(Ordering::Relaxed) > 3_600_000 {
+        shared.renewed_at.store(now, Ordering::Relaxed);
+        let _ = signin::open_gemini(&app, true);
+    }
+
     *shared.snapshots.lock().unwrap() = result.clone();
     update_tray(&app, &result);
     let _ = app.emit("snapshots", result);
@@ -88,15 +107,29 @@ async fn refresh(app: AppHandle) {
 
 /// The number next to the icon: the tightest main limit across services.
 fn update_tray(app: &AppHandle, snapshots: &[Snapshot]) {
-    let tightest = snapshots
-        .iter()
-        .flat_map(|s| s.meters.iter().map(move |m| (s, m)))
-        .filter(|(_, m)| m.primary)
-        .filter_map(|(s, m)| m.used_percent.map(|p| (s, p)))
-        .max_by(|a, b| a.1.total_cmp(&b.1));
+    let tightest_of = |only: Option<&str>| {
+        snapshots
+            .iter()
+            .filter(|s| only.is_none_or(|id| s.id == id))
+            .flat_map(|s| s.meters.iter().map(move |m| (s, m)))
+            .filter(|(_, m)| m.primary)
+            .filter_map(|(s, m)| m.used_percent.map(|p| (s, p)))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+    };
+    // The chosen service; if it has nothing to show right now, the tightest of all.
+    let chosen = app.state::<Shared>().tray_service.lock().unwrap().clone();
+    let tightest = chosen
+        .as_deref()
+        .and_then(|id| tightest_of(Some(id)))
+        .or_else(|| tightest_of(None));
     if let Some(tray) = app.tray_by_id("main") {
         match tightest {
-            Some((service, percent)) => {
+            Some((service, used)) => {
+                let percent = if app.state::<Shared>().show_left.load(Ordering::Relaxed) {
+                    100.0 - used
+                } else {
+                    used
+                };
                 let _ = tray.set_title(Some(format!("{percent:.0}%")));
                 let _ = tray.set_tooltip(Some(format!("AImeter: {} {percent:.0}%", service.name)));
             }
@@ -105,6 +138,29 @@ fn update_tray(app: &AppHandle, snapshots: &[Snapshot]) {
                 let _ = tray.set_tooltip(Some("AImeter"));
             }
         }
+    }
+}
+
+/// Under the menu bar icon on macOS, above the tray icon on Windows.
+fn panel_spot() -> Position {
+    if cfg!(target_os = "macos") {
+        Position::TrayBottomCenter
+    } else {
+        Position::TrayCenter
+    }
+}
+
+/// The panel is as tall as its content; the UI reports the height it needs.
+#[tauri::command]
+fn fit_panel(app: AppHandle, height: f64) {
+    let Some(panel) = app.get_webview_window("main") else {
+        return;
+    };
+    let height = height.clamp(150.0, 640.0);
+    let _ = panel.set_size(tauri::LogicalSize::new(360.0, height));
+    // Keep it attached to the icon after it grew or shrank.
+    if panel.is_visible().unwrap_or(false) {
+        let _ = panel.move_window(panel_spot());
     }
 }
 
@@ -122,14 +178,32 @@ fn toggle_panel(app: &AppHandle) {
     if providers::now_ms() - hidden_at < 250 {
         return;
     }
-    let spot = if cfg!(target_os = "macos") {
-        Position::TrayBottomCenter
-    } else {
-        Position::TrayCenter
-    };
-    let _ = panel.move_window(spot);
+    let _ = panel.move_window(panel_spot());
     let _ = panel.show();
     let _ = panel.set_focus();
+}
+
+/// The panel tells which way the user wants the numbers shown.
+#[tauri::command]
+fn set_show_left(app: AppHandle, left: bool) {
+    let shared = app.state::<Shared>();
+    shared.show_left.store(left, Ordering::Relaxed);
+    let snapshots = shared.snapshots.lock().unwrap().clone();
+    update_tray(&app, &snapshots);
+}
+
+/// Which service the number next to the icon follows; empty = the tightest.
+#[tauri::command]
+fn set_tray_service(app: AppHandle, id: String) {
+    let shared = app.state::<Shared>();
+    *shared.tray_service.lock().unwrap() = providers::info(&id).map(|info| info.id.to_string());
+    let snapshots = shared.snapshots.lock().unwrap().clone();
+    update_tray(&app, &snapshots);
+}
+
+#[tauri::command]
+fn set_auto_update(app: AppHandle, on: bool) {
+    app.state::<Shared>().auto_update.store(on, Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -152,6 +226,24 @@ async fn set_api_key(app: AppHandle, id: String, key: String) -> Result<(), Stri
         .await
         .map_err(|e| e.to_string())??;
     app.state::<Shared>().quiet_until.lock().unwrap().remove(&id);
+    refresh(app).await;
+    Ok(())
+}
+
+#[tauri::command]
+fn connect_service(app: AppHandle, id: String) -> Result<(), String> {
+    if !signin::can_connect(&id) {
+        return Err("unknown service".into());
+    }
+    signin::open_gemini(&app, false)
+}
+
+#[tauri::command]
+async fn disconnect_service(app: AppHandle, id: String) -> Result<(), String> {
+    if !signin::can_connect(&id) {
+        return Err("unknown service".into());
+    }
+    signin::forget_gemini(&app).await?;
     refresh(app).await;
     Ok(())
 }
@@ -206,18 +298,29 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Shared {
             client,
             snapshots: Mutex::new(Vec::new()),
             quiet_until: Mutex::new(HashMap::new()),
             busy: tokio::sync::Mutex::new(()),
             hidden_at: AtomicI64::new(0),
+            show_left: AtomicBool::new(false),
+            renewed_at: AtomicI64::new(0),
+            tray_service: Mutex::new(None),
+            auto_update: AtomicBool::new(true),
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshots,
             refresh_now,
             set_api_key,
             open_link,
+            fit_panel,
+            set_show_left,
+            set_tray_service,
+            set_auto_update,
+            connect_service,
+            disconnect_service,
             quit
         ])
         .setup(|app| {
@@ -253,6 +356,8 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            tauri::async_runtime::spawn(updates::watch(app.handle().clone()));
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {
@@ -263,6 +368,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Only the panel hides when it loses focus; sign-in windows stay.
+            if window.label() != "main" {
+                return;
+            }
             if let WindowEvent::Focused(false) = event {
                 window
                     .app_handle()

@@ -10,10 +10,20 @@ Working title; the name will change.
 
 | Service | How it is found |
 | --- | --- |
-| Claude | Claude Code sign-in |
+| Claude Code | Claude Code sign-in |
 | Codex / ChatGPT | Codex CLI sign-in |
 | Cursor | Cursor editor sign-in |
 | GitHub Copilot | GitHub CLI sign-in |
+| Antigravity | the running Antigravity app |
+| Windsurf | Windsurf editor (last numbers it saved) |
+| Grok | Grok CLI sign-in |
+| Kiro | Kiro editor (last numbers it saved) |
+| JetBrains AI | any JetBrains IDE with AI Assistant |
+| Devin | Devin CLI or app sign-in |
+| Amp | Amp CLI sign-in |
+| OpenCode Go | OpenCode sign-in |
+| Kimi Code | Kimi CLI sign-in |
+| Codebuff | Codebuff CLI sign-in |
 | OpenRouter | API key |
 | DeepSeek | API key |
 

@@ -61,6 +61,7 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     let mut data = Data {
         plan: body["copilot_plan"].as_str().map(|p| title_case(&p.replace('_', " "))),
         meters: vec![],
+        ..Default::default()
     };
 
     // Paid plans: each quota reports what is left.

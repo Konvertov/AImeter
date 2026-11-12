@@ -35,8 +35,10 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     let body = send_json(request).await?;
 
     let mut data = Data {
+        account: tokens["id_token"].as_str().and_then(token_email),
         plan: body["plan_type"].as_str().map(title_case),
         meters: vec![],
+        ..Default::default()
     };
     for slot in ["primary_window", "secondary_window"] {
         if let Some(meter) = window(&body["rate_limit"][slot], None) {
@@ -54,6 +56,9 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
             data.meters.push(Meter::text("credits", format!("{}", balance.floor())));
         }
     }
+    if let Some(count) = number(&body["rate_limit_reset_credits"]["available_count"]).filter(|c| *c > 0.0) {
+        data.meters.push(Meter::text("resets_available", format!("{count:.0}")));
+    }
     Ok(data)
 }
 
@@ -67,5 +72,6 @@ fn window(value: &Value, fixed_label: Option<&str>) -> Option<Meter> {
         None => "limit",
     });
     let resets = number(&value["reset_at"]).map(|seconds| (seconds * 1000.0) as i64);
-    Some(Meter::percent(label, used).resets(resets))
+    let length = number(&value["limit_window_seconds"]).unwrap_or(0.0) as i64;
+    Some(Meter::percent(label, used).resets(resets).window(length))
 }

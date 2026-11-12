@@ -17,6 +17,16 @@ fn saved_login() -> Option<String> {
     std::fs::read_to_string(folder.join(".credentials.json")).ok()
 }
 
+/// Claude Code writes the signed-in e-mail into its settings file.
+fn account_email() -> Option<String> {
+    let folder = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(dirs::home_dir)?;
+    let text = std::fs::read_to_string(folder.join(".claude.json")).ok()?;
+    let settings: Value = serde_json::from_str(&text).ok()?;
+    settings["oauthAccount"]["emailAddress"].as_str().map(String::from)
+}
+
 pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     let raw = blocking(saved_login).await.ok_or(Fail::NotFound)?;
     let login: Value = serde_json::from_str(&raw).map_err(|_| Fail::NotFound)?;
@@ -32,22 +42,24 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     .await?;
 
     let mut data = Data {
+        account: blocking(account_email).await,
         plan: oauth["subscriptionType"].as_str().map(title_case),
         meters: vec![],
+        ..Default::default()
     };
 
     // Known windows first, in a fixed order; anything new the service adds
     // later still shows up under its raw name.
     let known = [
-        ("five_hour", "session", true),
-        ("seven_day", "weekly", true),
-        ("seven_day_opus", "weekly_opus", false),
-        ("seven_day_sonnet", "weekly_sonnet", false),
+        ("five_hour", "session", true, 5 * HOUR),
+        ("seven_day", "weekly", true, 7 * DAY),
+        ("seven_day_opus", "weekly_opus", false, 7 * DAY),
+        ("seven_day_sonnet", "weekly_sonnet", false, 7 * DAY),
     ];
     let mut seen: Vec<&str> = vec!["extra_usage"];
-    for (field, label, primary) in known {
+    for (field, label, primary, length) in known {
         seen.push(field);
-        if let Some(meter) = window(&body[field], label) {
+        if let Some(meter) = window(&body[field], label).map(|m| m.window(length)) {
             data.meters.push(if primary { meter.primary() } else { meter });
         }
     }

@@ -51,10 +51,15 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     .await?;
 
     let resets = number(&body["billingCycleEnd"]).map(|ms| ms as i64);
+    let cycle = match (number(&body["billingCycleStart"]), resets) {
+        (Some(start), Some(end)) => (end - start as i64) / 1000,
+        _ => 0,
+    };
     let plan = &body["planUsage"];
     let mut data = Data {
         plan: login.plan.as_deref().map(|p| title_case(&p.replace('_', " "))),
         meters: vec![],
+        ..Default::default()
     };
 
     let limit = number(&plan["limit"]).unwrap_or(0.0);
@@ -64,7 +69,7 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
         _ => None,
     });
     if let Some(total) = total {
-        let mut meter = Meter::percent("plan_usage", total).resets(resets).primary();
+        let mut meter = Meter::percent("plan_usage", total).resets(resets).window(cycle).primary();
         if let (Some(spent), true) = (spent, limit > 0.0) {
             meter = meter.detail(format!("{} / {}", dollars(spent / 100.0), dollars(limit / 100.0)));
         }

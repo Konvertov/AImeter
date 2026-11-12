@@ -44,12 +44,59 @@ const words: Record<Lang, Record<string, string>> = {
     not_detected: "Not found on this computer",
     not_detected_hint: "Install the program and sign in. It will appear here on its own.",
     empty_title: "No AI tools found yet",
-    empty_hint: "Sign in to Claude Code, Codex, Cursor or GitHub CLI, or add an API key in Settings.",
+    empty_hint: "Sign in to an AI tool on this computer (Claude Code, Codex, Cursor and others), or add an API key in Settings.",
     state_expired: "Sign-in expired. Open the program once to renew it.",
+    state_expired_connect: "Sign-in expired. Connect again in Settings.",
     state_needs_key: "Add an API key in Settings.",
     state_rate_limited: "The service asked to slow down. Showing the last numbers.",
     state_error: "Could not update",
     loading: "Looking for your AI tools…",
+    developed_by: "Developed by",
+    updates: "Updates",
+    updates_auto: "Install automatically",
+    updates_off: "Off",
+    updates_hint: "New versions are installed quietly while the panel is closed.",
+    quit_question: "Quit AImeter?",
+    cancel: "Cancel",
+    tray_number: "Number next to the icon",
+    tray_auto: "Tightest limit of all",
+    tray_hint: "If the chosen service has nothing to show, the tightest limit is used.",
+    signin_services: "Sign in once",
+    signin_hint: "A window opens with the service's own site. Sign in there; AImeter never sees your password.",
+    connect: "Connect",
+    disconnect: "Disconnect",
+    connected: "Connected",
+    not_connected: "Not connected",
+    left: "left",
+    show_as: "Show limits as",
+    show_used: "Used",
+    show_left: "Left",
+    cost_today: "Cost today",
+    cost_month: "Cost, last 30 days",
+    at_api_prices: "cost is an estimate at API prices",
+    cost_partial: "some models have no known price",
+    in_reserve: "in reserve",
+    over_pace: "over pace",
+    on_pace: "On pace",
+    runs_out_in: "At this pace runs out in",
+    limit_reached: "Limit reached",
+    resets_available: "Limit resets available",
+    tokens_today: "Tokens today",
+    tokens_month: "Tokens, last 30 days",
+    top_model: "Top model",
+    from_logs: "from local logs",
+    daily: "Daily",
+    bonus_credits: "Bonus credits",
+    quota: "Quota",
+    free_tier: "Free tier",
+    prompt_credits: "Prompt credits",
+    flow_actions: "Flow actions",
+    flex_credits: "Flex credits",
+    extra_balance: "Extra balance",
+    pay_as_you_go: "Pay-as-you-go cap",
+    time_format: "Time format",
+    clock_12: "12-hour",
+    clock_24: "24-hour",
   },
   ru: {
     session: "Сессия (5 ч)",
@@ -94,12 +141,59 @@ const words: Record<Lang, Record<string, string>> = {
     not_detected: "Не найдено на этом компьютере",
     not_detected_hint: "Установите программу и войдите в аккаунт. Она появится здесь сама.",
     empty_title: "Нейросети пока не найдены",
-    empty_hint: "Войдите в Claude Code, Codex, Cursor или GitHub CLI либо добавьте API-ключ в настройках.",
+    empty_hint: "Войдите в любую нейросеть на этом компьютере (Claude Code, Codex, Cursor и другие) либо добавьте API-ключ в настройках.",
     state_expired: "Вход устарел. Откройте программу один раз, чтобы он обновился.",
+    state_expired_connect: "Вход устарел. Подключите заново в настройках.",
     state_needs_key: "Добавьте API-ключ в настройках.",
     state_rate_limited: "Сервис попросил подождать. Показаны последние данные.",
     state_error: "Не удалось обновить",
     loading: "Ищем ваши нейросети…",
+    developed_by: "Разработано:",
+    updates: "Обновления",
+    updates_auto: "Ставить автоматически",
+    updates_off: "Выключено",
+    updates_hint: "Новые версии ставятся незаметно, пока панель закрыта.",
+    quit_question: "Выйти из AImeter?",
+    cancel: "Отмена",
+    tray_number: "Число у значка",
+    tray_auto: "Самый тесный лимит из всех",
+    tray_hint: "Если у выбранной нейросети нет данных, показывается самый тесный лимит.",
+    signin_services: "Вход один раз",
+    signin_hint: "Откроется окно с сайтом самого сервиса. Войдите там; пароль AImeter не видит.",
+    connect: "Подключить",
+    disconnect: "Отключить",
+    connected: "Подключено",
+    not_connected: "Не подключено",
+    left: "осталось",
+    show_as: "Показывать лимиты как",
+    show_used: "Израсходовано",
+    show_left: "Осталось",
+    cost_today: "Стоимость сегодня",
+    cost_month: "Стоимость за 30 дней",
+    at_api_prices: "стоимость — оценка по ценам API",
+    cost_partial: "для части моделей цена неизвестна",
+    in_reserve: "в запасе",
+    over_pace: "сверх темпа",
+    on_pace: "В темпе",
+    runs_out_in: "При таком темпе закончится через",
+    limit_reached: "Лимит исчерпан",
+    resets_available: "Доступно сбросов лимита",
+    tokens_today: "Токенов сегодня",
+    tokens_month: "Токенов за 30 дней",
+    top_model: "Чаще всего",
+    from_logs: "по журналам на этом компьютере",
+    daily: "День",
+    bonus_credits: "Бонусные кредиты",
+    quota: "Квота",
+    free_tier: "Бесплатный лимит",
+    prompt_credits: "Кредиты запросов",
+    flow_actions: "Действия Flow",
+    flex_credits: "Flex-кредиты",
+    extra_balance: "Доп. баланс",
+    pay_as_you_go: "Потолок оплаты по факту",
+    time_format: "Формат времени",
+    clock_12: "12 часов",
+    clock_24: "24 часа",
   },
 };
 
@@ -126,7 +220,8 @@ export function setLang(next: Lang): void {
 
 /** Translate a key; unknown keys (new limits a service adds) are shown readable as is. */
 export function t(key: string): string {
-  return words[current][key] ?? words.en[key] ?? key.replace(/_/g, " ");
+  // Model names and other texts that come from a service are shown as they are.
+  return words[current][key] ?? words.en[key] ?? key;
 }
 
 export function duration(ms: number): string {
@@ -138,4 +233,92 @@ export function duration(ms: number): string {
   if (d > 0) return `${d}${u.d} ${h}${u.h}`;
   if (h > 0) return `${h}${u.h} ${m}${u.m}`;
   return `${m}${u.m}`;
+}
+
+export type Clock = "12" | "24";
+
+/** Clock style: the user's choice, otherwise 12-hour in English and 24-hour in Russian. */
+export function clock(): Clock {
+  try {
+    const saved = localStorage.getItem("clock");
+    if (saved === "12" || saved === "24") return saved;
+  } catch {
+    /* ignore */
+  }
+  return current === "ru" ? "24" : "12";
+}
+
+export function setClock(next: Clock): void {
+  try {
+    localStorage.setItem("clock", next);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function timeOfDay(ms: number): string {
+  return new Date(ms).toLocaleTimeString(current === "ru" ? "ru-RU" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: clock() === "12",
+  });
+}
+
+/** Limits shown as spent ("used") or as remaining ("left"). */
+export function showLeft(): boolean {
+  try {
+    return localStorage.getItem("show") === "left";
+  } catch {
+    return false;
+  }
+}
+
+export function setShowLeft(left: boolean): void {
+  try {
+    localStorage.setItem("show", left ? "left" : "used");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function money(amount: number): string {
+  return new Intl.NumberFormat(current === "ru" ? "ru-RU" : "en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/** Service whose limit is shown next to the icon; "" = the tightest of all. */
+export function trayService(): string {
+  try {
+    return localStorage.getItem("tray") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setTrayService(id: string): void {
+  try {
+    localStorage.setItem("tray", id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function autoUpdate(): boolean {
+  try {
+    return localStorage.getItem("updates") !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setAutoUpdate(on: boolean): void {
+  try {
+    localStorage.setItem("updates", on ? "on" : "off");
+  } catch {
+    /* ignore */
+  }
 }
