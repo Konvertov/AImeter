@@ -1,0 +1,277 @@
+mod providers;
+mod secrets;
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Mutex;
+use std::time::Duration;
+
+use providers::Snapshot;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri_plugin_positioner::{Position, WindowExt};
+
+/// How often every service is asked again.
+const REFRESH_EVERY: Duration = Duration::from_secs(5 * 60);
+/// How long a service is left alone after it asked us to slow down.
+const SLOW_DOWN_MS: i64 = 20 * 60 * 1000;
+
+struct Shared {
+    client: reqwest::Client,
+    snapshots: Mutex<Vec<Snapshot>>,
+    /// Service id -> time (ms) before which it must not be asked again.
+    quiet_until: Mutex<HashMap<String, i64>>,
+    busy: tokio::sync::Mutex<()>,
+    hidden_at: AtomicI64,
+}
+
+async fn refresh(app: AppHandle) {
+    let shared = app.state::<Shared>();
+    let Ok(_guard) = shared.busy.try_lock() else {
+        return; // a refresh is already running
+    };
+
+    let now = providers::now_ms();
+    let previous = shared.snapshots.lock().unwrap().clone();
+    let quiet = shared.quiet_until.lock().unwrap().clone();
+
+    let mut jobs = Vec::new();
+    for info in providers::ALL {
+        if quiet.get(info.id).is_some_and(|until| *until > now) {
+            continue;
+        }
+        let client = shared.client.clone();
+        jobs.push(tauri::async_runtime::spawn(async move {
+            providers::snapshot(info, &client).await
+        }));
+    }
+
+    let mut fresh: Vec<Snapshot> = Vec::new();
+    for job in jobs {
+        if let Ok(snapshot) = job.await {
+            fresh.push(snapshot);
+        }
+    }
+
+    let mut result = Vec::new();
+    for info in providers::ALL {
+        let old = previous.iter().find(|s| s.id == info.id).cloned();
+        match fresh.iter().find(|s| s.id == info.id).cloned() {
+            Some(mut new) => {
+                if new.state == "rate_limited" {
+                    shared
+                        .quiet_until
+                        .lock()
+                        .unwrap()
+                        .insert(info.id.to_string(), now + SLOW_DOWN_MS);
+                }
+                // A hiccup should not wipe numbers we already had: keep the
+                // last good ones on screen, marked with the new state.
+                if matches!(new.state.as_str(), "rate_limited" | "error" | "expired") {
+                    if let Some(old) = old.filter(|o| !o.meters.is_empty()) {
+                        new.meters = old.meters;
+                        new.plan = old.plan;
+                        new.fetched_at = old.fetched_at;
+                    }
+                }
+                result.push(new);
+            }
+            None => result.extend(old),
+        }
+    }
+
+    *shared.snapshots.lock().unwrap() = result.clone();
+    update_tray(&app, &result);
+    let _ = app.emit("snapshots", result);
+}
+
+/// The number next to the icon: the tightest main limit across services.
+fn update_tray(app: &AppHandle, snapshots: &[Snapshot]) {
+    let tightest = snapshots
+        .iter()
+        .flat_map(|s| s.meters.iter().map(move |m| (s, m)))
+        .filter(|(_, m)| m.primary)
+        .filter_map(|(s, m)| m.used_percent.map(|p| (s, p)))
+        .max_by(|a, b| a.1.total_cmp(&b.1));
+    if let Some(tray) = app.tray_by_id("main") {
+        match tightest {
+            Some((service, percent)) => {
+                let _ = tray.set_title(Some(format!("{percent:.0}%")));
+                let _ = tray.set_tooltip(Some(format!("AImeter: {} {percent:.0}%", service.name)));
+            }
+            None => {
+                let _ = tray.set_title(None::<String>);
+                let _ = tray.set_tooltip(Some("AImeter"));
+            }
+        }
+    }
+}
+
+fn toggle_panel(app: &AppHandle) {
+    let Some(panel) = app.get_webview_window("main") else {
+        return;
+    };
+    if panel.is_visible().unwrap_or(false) {
+        let _ = panel.hide();
+        return;
+    }
+    // Clicking the icon while the panel is open first takes focus away
+    // (which hides it); do not reopen it on that same click.
+    let hidden_at = app.state::<Shared>().hidden_at.load(Ordering::Relaxed);
+    if providers::now_ms() - hidden_at < 250 {
+        return;
+    }
+    let spot = if cfg!(target_os = "macos") {
+        Position::TrayBottomCenter
+    } else {
+        Position::TrayCenter
+    };
+    let _ = panel.move_window(spot);
+    let _ = panel.show();
+    let _ = panel.set_focus();
+}
+
+#[tauri::command]
+fn get_snapshots(shared: tauri::State<Shared>) -> Vec<Snapshot> {
+    shared.snapshots.lock().unwrap().clone()
+}
+
+#[tauri::command]
+async fn refresh_now(app: AppHandle) {
+    refresh(app).await;
+}
+
+#[tauri::command]
+async fn set_api_key(app: AppHandle, id: String, key: String) -> Result<(), String> {
+    if !providers::info(&id).is_some_and(|info| info.key_env.is_some()) {
+        return Err("unknown service".into());
+    }
+    let service = id.clone();
+    tauri::async_runtime::spawn_blocking(move || secrets::save_api_key(&service, &key))
+        .await
+        .map_err(|e| e.to_string())??;
+    app.state::<Shared>().quiet_until.lock().unwrap().remove(&id);
+    refresh(app).await;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("only https links".into());
+    }
+    let mut command = if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg(&url);
+        c
+    } else if cfg!(windows) {
+        let mut c = std::process::Command::new("rundll32");
+        c.args(["url.dll,FileProtocolHandler", &url]);
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    command.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent(concat!("AImeter/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .expect("http client");
+
+    // `aimeter --json` prints what every service returned and exits.
+    // Handy for checking a service without opening the panel.
+    if std::env::args().any(|arg| arg == "--json") {
+        let all = tauri::async_runtime::block_on(async {
+            let mut all = Vec::new();
+            for info in providers::ALL {
+                all.push(providers::snapshot(info, &client).await);
+            }
+            all
+        });
+        println!("{}", serde_json::to_string_pretty(&all).unwrap_or_default());
+        return;
+    }
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_positioner::init())
+        .manage(Shared {
+            client,
+            snapshots: Mutex::new(Vec::new()),
+            quiet_until: Mutex::new(HashMap::new()),
+            busy: tokio::sync::Mutex::new(()),
+            hidden_at: AtomicI64::new(0),
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_snapshots,
+            refresh_now,
+            set_api_key,
+            open_link,
+            quit
+        ])
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            let refresh_item = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit AImeter", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&refresh_item, &quit_item])?;
+
+            TrayIconBuilder::with_id("main")
+                .icon(app.default_window_icon().expect("app icon").clone())
+                .tooltip("AImeter")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "refresh" => {
+                        tauri::async_runtime::spawn(refresh(app.clone()));
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        toggle_panel(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    refresh(handle.clone()).await;
+                    tokio::time::sleep(REFRESH_EVERY).await;
+                }
+            });
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::Focused(false) = event {
+                window
+                    .app_handle()
+                    .state::<Shared>()
+                    .hidden_at
+                    .store(providers::now_ms(), Ordering::Relaxed);
+                let _ = window.hide();
+            }
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running AImeter");
+}
