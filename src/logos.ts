@@ -1,3 +1,4 @@
+import abliteration from "./logos/abliteration.svg?raw";
 import claude from "./logos/claude.svg?raw";
 import codex from "./logos/codex.svg?raw";
 import copilot from "./logos/copilot.svg?raw";
@@ -13,6 +14,7 @@ import windsurf from "./logos/windsurf.svg?raw";
 
 /** Logo drawing and its colour per service. No colour = follows the text colour. */
 const logos: Record<string, { svg: string; color?: string }> = {
+  abliteration: { svg: abliteration },
   claude: { svg: claude, color: "#D97757" },
   codex: { svg: codex },
   cursor: { svg: cursor },

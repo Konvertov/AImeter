@@ -4,6 +4,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
+mod abliteration;
 mod amp;
 mod antigravity;
 mod claude;
@@ -164,6 +165,13 @@ pub const ALL: &[Info] = &[
         connect: false,
     },
     Info {
+        id: "abliteration",
+        name: "abliteration.ai",
+        key_env: Some("ABLITERATION_API_KEY"),
+        key_url: Some("https://abliteration.ai"),
+        connect: false,
+    },
+    Info {
         id: "deepseek",
         name: "DeepSeek",
         key_env: Some("DEEPSEEK_API_KEY"),
@@ -174,6 +182,34 @@ pub const ALL: &[Info] = &[
 
 pub fn info(id: &str) -> Option<&'static Info> {
     ALL.iter().find(|p| p.id == id)
+}
+
+/// A card stand-in for a service the user switched off: it is not asked at all.
+pub fn hidden(info: &'static Info) -> Snapshot {
+    stand_in(info, "hidden", None)
+}
+
+/// A card stand-in for a service that did not answer in time.
+pub fn timed_out(info: &'static Info) -> Snapshot {
+    stand_in(info, "error", Some("timeout".into()))
+}
+
+fn stand_in(info: &'static Info, state: &str, message: Option<String>) -> Snapshot {
+    Snapshot {
+        id: info.id.into(),
+        name: info.name.into(),
+        state: state.into(),
+        message,
+        plan: None,
+        account: None,
+        meters: vec![],
+        stats: None,
+        fetched_at: now_ms(),
+        key_based: info.key_env.is_some(),
+        has_key: false,
+        key_url: info.key_url.map(String::from),
+        connect: info.connect,
+    }
 }
 
 pub async fn snapshot(info: &'static Info, client: &reqwest::Client) -> Snapshot {
@@ -195,6 +231,7 @@ pub async fn snapshot(info: &'static Info, client: &reqwest::Client) -> Snapshot
         "codebuff" => codebuff::fetch(client).await,
         "openrouter" => openrouter::fetch(client).await,
         "deepseek" => deepseek::fetch(client).await,
+        "abliteration" => abliteration::fetch(client).await,
         _ => Err(Fail::NotFound),
     };
     let has_key = if info.connect {

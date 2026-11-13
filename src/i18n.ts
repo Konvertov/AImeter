@@ -34,15 +34,15 @@ const words: Record<Lang, Record<string, string>> = {
     quit: "Quit",
     language: "Language",
     api_keys: "API keys",
-    api_keys_hint: "Stored in your system password store. Never sent anywhere except the service itself.",
+    api_keys_hint: "Stored on this computer only. Never sent anywhere except the service itself.",
     save: "Save",
     remove: "Remove",
     get_key: "Get a key",
     key_saved: "Key saved",
     paste_key: "Paste API key",
     detected: "Found on this computer",
-    not_detected: "Not found on this computer",
-    not_detected_hint: "Install the program and sign in. It will appear here on its own.",
+    not_detected: "Not connected",
+    not_detected_hint: "Programs appear on their own once installed and signed in. Services marked with a note need a key or a sign-in: click one to set it up.",
     empty_title: "No AI tools found yet",
     empty_hint: "Sign in to an AI tool on this computer (Claude Code, Codex, Cursor and others), or add an API key in Settings.",
     state_expired: "Sign-in expired. Open the program once to renew it.",
@@ -52,6 +52,28 @@ const words: Record<Lang, Record<string, string>> = {
     state_error: "Could not update",
     loading: "Looking for your AI tools…",
     developed_by: "Developed by",
+    hide: "Hide",
+    show: "Show",
+    hidden_services: "Hidden",
+    hidden_hint: "Hidden AI tools are not checked and not shown.",
+    show_details: "Details",
+    hide_details: "Collapse",
+    main_service: "Main",
+    make_main: "Make main",
+    tab_services: "AI tools",
+    tab_look: "Appearance",
+    tab_limits: "Limits",
+    tab_access: "Sign-in and keys",
+    tab_updates: "Updates",
+    needs_setup: "Needs setting up",
+    set_up: "Set up",
+    needs_signin: "sign in once",
+    needs_key_short: "needs an API key",
+    about: "About",
+    theme: "Appearance",
+    theme_system: "As system",
+    theme_light: "Light",
+    theme_dark: "Dark",
     updates: "Updates",
     updates_auto: "Install automatically",
     updates_off: "Off",
@@ -131,15 +153,15 @@ const words: Record<Lang, Record<string, string>> = {
     quit: "Выйти",
     language: "Язык",
     api_keys: "API-ключи",
-    api_keys_hint: "Хранятся в системном хранилище паролей. Отправляются только самому сервису.",
+    api_keys_hint: "Хранятся только на этом компьютере. Отправляются только самому сервису.",
     save: "Сохранить",
     remove: "Удалить",
     get_key: "Получить ключ",
     key_saved: "Ключ сохранён",
     paste_key: "Вставьте API-ключ",
     detected: "Найдено на этом компьютере",
-    not_detected: "Не найдено на этом компьютере",
-    not_detected_hint: "Установите программу и войдите в аккаунт. Она появится здесь сама.",
+    not_detected: "Не подключено",
+    not_detected_hint: "Программы появятся сами после установки и входа. Сервисам с пометкой нужен ключ или вход: нажмите на такой, чтобы настроить.",
     empty_title: "Нейросети пока не найдены",
     empty_hint: "Войдите в любую нейросеть на этом компьютере (Claude Code, Codex, Cursor и другие) либо добавьте API-ключ в настройках.",
     state_expired: "Вход устарел. Откройте программу один раз, чтобы он обновился.",
@@ -149,6 +171,28 @@ const words: Record<Lang, Record<string, string>> = {
     state_error: "Не удалось обновить",
     loading: "Ищем ваши нейросети…",
     developed_by: "Разработано:",
+    hide: "Скрыть",
+    show: "Показать",
+    hidden_services: "Скрытые",
+    hidden_hint: "Скрытые нейросети не опрашиваются и не показываются.",
+    show_details: "Подробнее",
+    hide_details: "Свернуть",
+    main_service: "Главная",
+    make_main: "Сделать главной",
+    tab_services: "Нейросети",
+    tab_look: "Оформление",
+    tab_limits: "Лимиты",
+    tab_access: "Вход и ключи",
+    tab_updates: "Обновления",
+    needs_setup: "Нужно настроить",
+    set_up: "Настроить",
+    needs_signin: "войти один раз",
+    needs_key_short: "нужен API-ключ",
+    about: "О приложении",
+    theme: "Оформление",
+    theme_system: "Как в системе",
+    theme_light: "Светлое",
+    theme_dark: "Тёмное",
     updates: "Обновления",
     updates_auto: "Ставить автоматически",
     updates_off: "Выключено",
@@ -318,6 +362,69 @@ export function autoUpdate(): boolean {
 export function setAutoUpdate(on: boolean): void {
   try {
     localStorage.setItem("updates", on ? "on" : "off");
+  } catch {
+    /* ignore */
+  }
+}
+
+export type Theme = "system" | "light" | "dark";
+
+export function theme(): Theme {
+  try {
+    const saved = localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    /* ignore */
+  }
+  return "system";
+}
+
+/** Remember the choice and repaint: "system" follows the computer's own setting. */
+export function setTheme(next: Theme): void {
+  try {
+    localStorage.setItem("theme", next);
+  } catch {
+    /* ignore */
+  }
+  applyTheme();
+}
+
+export function applyTheme(): void {
+  const chosen = theme();
+  if (chosen === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = chosen;
+}
+
+/** The service shown first and fully open; "" = the first one found. */
+export function mainService(): string {
+  try {
+    return localStorage.getItem("main") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setMainService(id: string): void {
+  try {
+    localStorage.setItem("main", id);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Services the user switched off. */
+export function hiddenServices(): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem("hidden") ?? "[]");
+    return Array.isArray(saved) ? saved.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setHiddenServices(ids: string[]): void {
+  try {
+    localStorage.setItem("hidden", JSON.stringify(ids));
   } catch {
     /* ignore */
   }

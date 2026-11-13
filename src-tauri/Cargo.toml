@@ -1,6 +1,6 @@
 [package]
 name = "aimeter"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI usage limits in your tray"
 edition = "2021"
 
@@ -22,9 +22,11 @@ tokio = { version = "1", features = ["time", "sync"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 dirs = "6"
-keyring = { version = "3", features = ["apple-native", "windows-native"] }
 base64 = "0.22"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"] }

@@ -3,7 +3,7 @@ mod secrets;
 mod signin;
 mod updates;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -16,6 +16,8 @@ use tauri_plugin_positioner::{Position, WindowExt};
 
 /// How often every service is asked again.
 const REFRESH_EVERY: Duration = Duration::from_secs(5 * 60);
+/// How long one service may take before the refresh goes on without it.
+const SERVICE_LIMIT: Duration = Duration::from_secs(30);
 /// How long a service is left alone after it asked us to slow down.
 const SLOW_DOWN_MS: i64 = 20 * 60 * 1000;
 
@@ -34,6 +36,8 @@ pub(crate) struct Shared {
     tray_service: Mutex<Option<String>>,
     /// The user may switch automatic updates off in Settings.
     pub(crate) auto_update: AtomicBool,
+    /// Services the user switched off; they are neither asked nor shown.
+    hidden: Mutex<HashSet<String>>,
 }
 
 pub(crate) async fn refresh(app: AppHandle) {
@@ -45,15 +49,21 @@ pub(crate) async fn refresh(app: AppHandle) {
     let now = providers::now_ms();
     let previous = shared.snapshots.lock().unwrap().clone();
     let quiet = shared.quiet_until.lock().unwrap().clone();
+    let hidden = shared.hidden.lock().unwrap().clone();
 
     let mut jobs = Vec::new();
     for info in providers::ALL {
-        if quiet.get(info.id).is_some_and(|until| *until > now) {
+        if hidden.contains(info.id) || quiet.get(info.id).is_some_and(|until| *until > now) {
             continue;
         }
         let client = shared.client.clone();
+        // One service waiting (say, on a system permission window) must not
+        // hold back the others: after the limit it is reported as "no answer".
         jobs.push(tauri::async_runtime::spawn(async move {
-            providers::snapshot(info, &client).await
+            match tokio::time::timeout(SERVICE_LIMIT, providers::snapshot(info, &client)).await {
+                Ok(snapshot) => snapshot,
+                Err(_) => providers::timed_out(info),
+            }
         }));
     }
 
@@ -66,7 +76,11 @@ pub(crate) async fn refresh(app: AppHandle) {
 
     let mut result = Vec::new();
     for info in providers::ALL {
-        let old = previous.iter().find(|s| s.id == info.id).cloned();
+        if hidden.contains(info.id) {
+            result.push(providers::hidden(info));
+            continue;
+        }
+        let old = previous.iter().find(|s| s.id == info.id && s.state != "hidden").cloned();
         match fresh.iter().find(|s| s.id == info.id).cloned() {
             Some(mut new) => {
                 if new.state == "rate_limited" {
@@ -89,6 +103,27 @@ pub(crate) async fn refresh(app: AppHandle) {
                 result.push(new);
             }
             None => result.extend(old),
+        }
+    }
+
+    // Preview aid: AIMETER_DEMO=3 shows three services with the numbers of the
+    // first working one (under the names of other services), to see how the
+    // panel looks with several. Off unless asked for.
+    if let Some(copies) = std::env::var("AIMETER_DEMO").ok().and_then(|n| n.parse::<usize>().ok()) {
+        if let Some(sample) = result.iter().find(|s| s.state == "ok" && !s.meters.is_empty()).cloned() {
+            let stand_ins: Vec<&providers::Info> = providers::ALL
+                .iter()
+                .filter(|info| info.id != sample.id && info.key_env.is_none() && !info.connect)
+                .take(copies.clamp(1, 10) - 1)
+                .collect();
+            for info in stand_ins {
+                if let Some(slot) = result.iter_mut().find(|s| s.id == info.id) {
+                    let mut copy = sample.clone();
+                    copy.id = info.id.to_string();
+                    copy.name = info.name.to_string();
+                    *slot = copy;
+                }
+            }
         }
     }
 
@@ -206,6 +241,18 @@ fn set_auto_update(app: AppHandle, on: bool) {
     app.state::<Shared>().auto_update.store(on, Ordering::Relaxed);
 }
 
+/// The panel tells which services the user switched off.
+#[tauri::command]
+async fn set_hidden_services(app: AppHandle, ids: Vec<String>) {
+    {
+        let shared = app.state::<Shared>();
+        *shared.hidden.lock().unwrap() = ids.into_iter().collect();
+        // Let a refresh that is already running finish, then apply the change.
+        let _wait = shared.busy.lock().await;
+    }
+    refresh(app).await;
+}
+
 #[tauri::command]
 fn get_snapshots(shared: tauri::State<Shared>) -> Vec<Snapshot> {
     shared.snapshots.lock().unwrap().clone()
@@ -309,6 +356,7 @@ pub fn run() {
             renewed_at: AtomicI64::new(0),
             tray_service: Mutex::new(None),
             auto_update: AtomicBool::new(true),
+            hidden: Mutex::new(HashSet::new()),
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshots,
@@ -318,6 +366,7 @@ pub fn run() {
             fit_panel,
             set_show_left,
             set_tray_service,
+            set_hidden_services,
             set_auto_update,
             connect_service,
             disconnect_service,

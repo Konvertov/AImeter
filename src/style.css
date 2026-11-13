@@ -12,8 +12,9 @@
   color-scheme: light dark;
 }
 
+/* Dark colours: when the system is dark (unless the user chose light)... */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14161c;
     --card: #1d2029;
     --text: #f2f4f8;
@@ -24,7 +25,27 @@
     --low: #4fd1a5;
     --mid: #f0b93a;
     --high: #f26b5e;
+    color-scheme: dark;
   }
+}
+
+/* ...or when the user chose dark in Settings. */
+:root[data-theme="dark"] {
+  --bg: #14161c;
+  --card: #1d2029;
+  --text: #f2f4f8;
+  --muted: #9aa3b2;
+  --line: #2a2e3a;
+  --track: #2c3140;
+  --accent: #4fd1a5;
+  --low: #4fd1a5;
+  --mid: #f0b93a;
+  --high: #f26b5e;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 * {
@@ -499,4 +520,128 @@ button.danger {
   background: var(--high);
   color: #ffffff;
   font-weight: 600;
+}
+
+/* Settings: a rail of icons on the left, the chosen page on the right. */
+.settings {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.rail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 10px 8px;
+}
+
+.rail button.icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--muted);
+}
+
+.rail button.icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rail button.icon.active {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--accent);
+}
+
+.list.page {
+  padding-left: 8px;
+  min-height: 190px;
+}
+
+.service-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.service-line + .service-line {
+  margin-top: 4px;
+}
+
+.service-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+
+.service-name .account {
+  font-weight: 400;
+  max-width: none;
+}
+
+/* Not found: quieter, two per row. */
+.service-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+
+.service-grid .service-line {
+  margin-top: 0;
+  opacity: 0.65;
+}
+
+.service-grid .service-name {
+  font-weight: 500;
+}
+
+button.fold {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 3px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  border-radius: 6px;
+}
+
+button.fold:hover {
+  color: var(--text);
+}
+
+.main-mark {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.line-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+button.link.quiet {
+  color: var(--muted);
+}
+
+button.link.quiet:hover {
+  color: var(--text);
+}
+
+.service-line.clickable {
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.service-grid .service-line.clickable:hover {
+  opacity: 1;
 }

@@ -2,7 +2,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { author } from "./author";
-import { autoUpdate, clock, duration, lang, setAutoUpdate, setClock, setLang, setShowLeft, setTrayService, showLeft, t, timeOfDay, trayService } from "./i18n";
+import { applyTheme, autoUpdate, clock, hiddenServices, setHiddenServices, mainService, setMainService, duration, lang, setAutoUpdate, setClock, setLang, setShowLeft, setTheme, setTrayService, showLeft, t, theme, timeOfDay, trayService } from "./i18n";
 import { logo } from "./logos";
 
 interface Meter {
@@ -27,7 +27,7 @@ interface Stats {
 interface Snapshot {
   id: string;
   name: string;
-  state: "ok" | "not_found" | "expired" | "needs_key" | "rate_limited" | "error";
+  state: "ok" | "not_found" | "expired" | "needs_key" | "rate_limited" | "error" | "hidden";
   message: string | null;
   plan: string | null;
   account: string | null;
@@ -65,6 +65,13 @@ function button(label: string, cls: string, onClick: () => void): HTMLButtonElem
 }
 
 const ICONS = {
+  services:
+    '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/>' +
+    '<rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+  look: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/>',
+  limits: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4.2-5.4"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/>',
+  access: '<circle cx="8" cy="15.5" r="4"/><path d="M10.9 12.6L19.5 4M15.5 8l3 3"/>',
+  updates: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/>',
   settings:
     '<circle cx="12" cy="12" r="6.4"/><circle cx="12" cy="12" r="2.6"/>' +
@@ -191,7 +198,15 @@ function statsBlock(stats: Stats): HTMLElement {
   return block;
 }
 
-function card(snap: Snapshot): HTMLElement {
+/** Cards the user opened or closed by hand: card key -> open? */
+const opened = new Map<string, boolean>();
+
+/**
+ * A service card. The main service shows everything; the others show only
+ * their main limits, with the rest (extra limits, token counts) folded away
+ * behind a "Details" line.
+ */
+function card(snap: Snapshot, key: string, isMain: boolean): HTMLElement {
   const names = el("span", "card-names", "", [el("span", "card-name", snap.name)]);
   if (snap.account) names.appendChild(el("span", "account", snap.account));
   const title = el("span", "card-title", "", [logo(snap.id, snap.name), names]);
@@ -205,9 +220,33 @@ function card(snap: Snapshot): HTMLElement {
         : t(snap.state === "expired" && snap.connect ? "state_expired_connect" : `state_${snap.state}`);
     node.appendChild(el("div", "notice", text));
   }
-  for (const meter of snap.meters) node.appendChild(meterRow(meter));
-  if (snap.stats) node.appendChild(statsBlock(snap.stats));
+  // Always visible: the main limits (or the first line when there are none).
+  const primary = snap.meters.filter((m) => m.primary);
+  const always = primary.length ? primary : snap.meters.slice(0, 1);
+  const extra = snap.meters.filter((m) => !always.includes(m));
+  for (const meter of always) node.appendChild(meterRow(meter));
+
+  if (extra.length || snap.stats) {
+    const open = opened.get(key) ?? isMain;
+    if (open) {
+      for (const meter of extra) node.appendChild(meterRow(meter));
+      if (snap.stats) node.appendChild(statsBlock(snap.stats));
+    }
+    const toggle = button(`${t(open ? "hide_details" : "show_details")} ${open ? "⌃" : "⌄"}`, "fold", () => {
+      opened.set(key, !open);
+      render();
+    });
+    node.appendChild(toggle);
+  }
   return node;
+}
+
+/** Services in display order: the chosen main one first. */
+function ordered(list: Snapshot[]): Snapshot[] {
+  const main = mainService();
+  const at = list.findIndex((s) => s.id === main);
+  if (at <= 0) return list;
+  return [list[at], ...list.slice(0, at), ...list.slice(at + 1)];
 }
 
 /** Telegram logo with the author's name; opens the channel. */
@@ -220,7 +259,10 @@ function credit(): HTMLElement | null {
 }
 
 function mainView(): HTMLElement {
-  const shown = snapshots.filter((s) => s.state !== "not_found" && !(s.state === "needs_key"));
+  const off = hiddenServices();
+  const shown = ordered(
+    snapshots.filter((s) => !["not_found", "needs_key", "hidden"].includes(s.state) && !off.includes(s.id)),
+  );
   const list = el("div", "list");
   if (!loaded) {
     list.appendChild(el("div", "empty", "", [el("p", "empty-title", t("loading"))]));
@@ -229,7 +271,7 @@ function mainView(): HTMLElement {
       el("div", "empty", "", [el("p", "empty-title", t("empty_title")), el("p", "empty-hint", t("empty_hint"))]),
     );
   } else {
-    for (const snap of shown) list.appendChild(card(snap));
+    shown.forEach((snap, index) => list.appendChild(card(snap, `${snap.id}#${index}`, index === 0)));
   }
 
   const newest = Math.max(0, ...shown.map((s) => s.fetched_at));
@@ -290,43 +332,126 @@ function connectRow(snap: Snapshot): HTMLElement {
   ]);
 }
 
-function settingsView(): HTMLElement {
-  const language = el("div", "segmented");
-  for (const [code, label] of [["en", "English"], ["ru", "Русский"]] as const) {
-    language.appendChild(
-      button(label, lang() === code ? "seg active" : "seg", () => {
-        setLang(code);
+type Tab = "services" | "look" | "limits" | "access" | "updates";
+let tab: Tab = "services";
+
+/** One titled block of a settings page. */
+function block(title: string, children: Node[]): HTMLElement {
+  return el("section", "card", "", [el("h2", "", t(title)), ...children]);
+}
+
+/** A row of choices where exactly one is on. */
+function choice<T>(options: readonly T[], current: T, label: (value: T) => string, pick: (value: T) => void): HTMLElement {
+  const row = el("div", "segmented");
+  for (const value of options) {
+    row.appendChild(
+      button(label(value), value === current ? "seg active" : "seg", () => {
+        pick(value);
         render();
       }),
     );
   }
+  return row;
+}
 
-  const body = el("div", "list");
-  body.appendChild(el("section", "card", "", [el("h2", "", t("language")), language]));
+/** A service line for the lists on the first settings page. */
+function serviceLine(snap: Snapshot, note = "", action?: HTMLElement): HTMLElement {
+  const name = el("span", "service-name", "", [el("span", "", snap.name)]);
+  if (note) name.appendChild(el("span", "account", note));
+  const line = el("div", "service-line", "", [logo(snap.id, snap.name), name]);
+  if (action) line.appendChild(action);
+  return line;
+}
 
-  const clocks = el("div", "segmented");
-  for (const code of ["12", "24"] as const) {
-    clocks.appendChild(
-      button(t(`clock_${code}`), clock() === code ? "seg active" : "seg", () => {
-        setClock(code);
-        render();
-      }),
-    );
+/** Switch a service off (hide) or back on, and tell the background part. */
+function setHidden(id: string, hide: boolean): void {
+  const ids = hiddenServices().filter((other) => other !== id);
+  if (hide) ids.push(id);
+  setHiddenServices(ids);
+  void invoke("set_hidden_services", { ids });
+  render();
+}
+
+/** First page: what was found on this computer, what needs setting up, what was not found. */
+function servicesPage(): HTMLElement[] {
+  const off = hiddenServices();
+  const isOff = (s: Snapshot) => s.state === "hidden" || off.includes(s.id);
+  const needsSetup = (s: Snapshot) => !isOff(s) && (s.key_based || s.connect) && !s.has_key;
+  const found = snapshots.filter((s) => !isOff(s) && s.state !== "not_found" && !needsSetup(s));
+  const setup = snapshots.filter(needsSetup);
+  const missing = snapshots.filter((s) => !isOff(s) && s.state === "not_found" && !needsSetup(s));
+  const hidden = snapshots.filter(isOff);
+  const pages: HTMLElement[] = [];
+
+  const foundBlock = block("detected", []);
+  if (found.length) {
+    for (const snap of found) {
+      const note = [snap.plan, snap.account].filter(Boolean).join(" · ");
+      const isMain = ordered(found)[0] === snap;
+      const mark = isMain
+        ? el("span", "main-mark", t("main_service"))
+        : button(t("make_main"), "link", () => {
+            setMainService(snap.id);
+            opened.clear();
+            render();
+          });
+      const actions = el("span", "line-actions", "", [
+        ...(found.length > 1 ? [mark] : []),
+        button(t("hide"), "link quiet", () => setHidden(snap.id, true)),
+      ]);
+      foundBlock.appendChild(serviceLine(snap, note, actions));
+    }
+  } else {
+    foundBlock.appendChild(el("p", "hint", t(loaded ? "empty_title" : "loading")));
   }
-  body.appendChild(el("section", "card", "", [el("h2", "", t("time_format")), clocks]));
+  pages.push(foundBlock);
 
-  const views = el("div", "segmented");
-  for (const left of [false, true]) {
-    views.appendChild(
-      button(t(left ? "show_left" : "show_used"), showLeft() === left ? "seg active" : "seg", () => {
-        setShowLeft(left);
-        void invoke("set_show_left", { left });
-        render();
-      }),
-    );
+  if (hidden.length) {
+    const hiddenBlock = block("hidden_services", []);
+    for (const snap of hidden) {
+      hiddenBlock.appendChild(serviceLine(snap, "", button(t("show"), "link", () => setHidden(snap.id, false))));
+    }
+    hiddenBlock.appendChild(el("p", "hint picker-hint", t("hidden_hint")));
+    pages.push(hiddenBlock);
   }
-  body.appendChild(el("section", "card", "", [el("h2", "", t("show_as")), views]));
 
+  // Everything not connected yet, in one place: tools that appear on their
+  // own once installed, and services that need a key or a sign-in.
+  const notConnected = snapshots.filter((s) => setup.includes(s) || missing.includes(s));
+  if (notConnected.length) {
+    const missingBlock = block("not_detected", []);
+    const grid = el("div", "service-grid");
+    for (const snap of notConnected) {
+      if (setup.includes(snap)) {
+        const line = serviceLine(snap, t(snap.connect ? "needs_signin" : "needs_key_short"));
+        line.classList.add("clickable");
+        line.title = t("set_up");
+        line.addEventListener("click", () => {
+          tab = "access";
+          render();
+        });
+        grid.appendChild(line);
+      } else {
+        grid.appendChild(serviceLine(snap));
+      }
+    }
+    missingBlock.append(grid, el("p", "hint picker-hint", t("not_detected_hint")));
+    pages.push(missingBlock);
+  }
+  return pages;
+}
+
+function lookPage(): HTMLElement[] {
+  return [
+    block("language", [
+      choice(["en", "ru"] as const, lang(), (code) => (code === "en" ? "English" : "Русский"), setLang),
+    ]),
+    block("theme", [choice(["system", "light", "dark"] as const, theme(), (value) => t(`theme_${value}`), setTheme)]),
+    block("time_format", [choice(["12", "24"] as const, clock(), (value) => t(`clock_${value}`), setClock)]),
+  ];
+}
+
+function limitsPage(): HTMLElement[] {
   const picker = el("select", "picker") as HTMLSelectElement;
   const option = (value: string, label: string) => {
     const node = el("option", "", label) as HTMLOptionElement;
@@ -343,65 +468,74 @@ function settingsView(): HTMLElement {
     setTrayService(picker.value);
     void invoke("set_tray_service", { id: picker.value });
   });
-  body.appendChild(
-    el("section", "card", "", [el("h2", "", t("tray_number")), picker, el("p", "hint picker-hint", t("tray_hint"))]),
-  );
-
-  const updates = el("div", "segmented");
-  for (const on of [true, false]) {
-    updates.appendChild(
-      button(t(on ? "updates_auto" : "updates_off"), autoUpdate() === on ? "seg active" : "seg", () => {
-        setAutoUpdate(on);
-        void invoke("set_auto_update", { on });
-        render();
+  return [
+    block("show_as", [
+      choice([false, true] as const, showLeft(), (left) => t(left ? "show_left" : "show_used"), (left) => {
+        setShowLeft(left);
+        void invoke("set_show_left", { left });
       }),
-    );
-  }
-  const updatesCard = el("section", "card", "", [
-    el("h2", "", t("updates")),
-    updates,
-    el("p", "hint picker-hint", t("updates_hint")),
-  ]);
+    ]),
+    block("tray_number", [picker, el("p", "hint picker-hint", t("tray_hint"))]),
+  ];
+}
 
+function accessPage(): HTMLElement[] {
+  const pages: HTMLElement[] = [];
   const connectable = snapshots.filter((s) => s.connect);
   if (connectable.length) {
-    const signin = el("section", "card", "", [el("h2", "", t("signin_services")), el("p", "hint", t("signin_hint"))]);
-    for (const snap of connectable) signin.appendChild(connectRow(snap));
-    body.appendChild(signin);
+    pages.push(block("signin_services", [el("p", "hint", t("signin_hint")), ...connectable.map(connectRow)]));
+  }
+  pages.push(
+    block("api_keys", [el("p", "hint", t("api_keys_hint")), ...snapshots.filter((s) => s.key_based).map(keyRow)]),
+  );
+  return pages;
+}
+
+function updatesPage(): HTMLElement[] {
+  return [
+    block("updates", [
+      choice([true, false] as const, autoUpdate(), (on) => t(on ? "updates_auto" : "updates_off"), (on) => {
+        setAutoUpdate(on);
+        void invoke("set_auto_update", { on });
+      }),
+      el("p", "hint picker-hint", t("updates_hint")),
+    ]),
+    block("about", [el("p", "names", `AImeter ${version}`)]),
+  ];
+}
+
+const TABS: { id: Tab; title: string; page: () => HTMLElement[] }[] = [
+  { id: "services", title: "tab_services", page: servicesPage },
+  { id: "look", title: "tab_look", page: lookPage },
+  { id: "limits", title: "tab_limits", page: limitsPage },
+  { id: "access", title: "tab_access", page: accessPage },
+  { id: "updates", title: "tab_updates", page: updatesPage },
+];
+
+function settingsView(): HTMLElement {
+  const current = TABS.find((entry) => entry.id === tab) ?? TABS[0];
+
+  // Icons down the left side switch between the pages.
+  const rail = el("nav", "rail");
+  for (const entry of TABS) {
+    const item = iconButton(entry.id, t(entry.title), () => {
+      tab = entry.id;
+      confirmingQuit = false;
+      render();
+    });
+    if (entry.id === current.id) item.classList.add("active");
+    rail.appendChild(item);
   }
 
-  const keys = el("section", "card", "", [el("h2", "", t("api_keys")), el("p", "hint", t("api_keys_hint"))]);
-  for (const snap of snapshots.filter((s) => s.key_based)) keys.appendChild(keyRow(snap));
-  body.appendChild(keys);
-
-  const auto = snapshots.filter((s) => !s.key_based && !s.connect);
-  const found = auto.filter((s) => s.state !== "not_found");
-  const missing = auto.filter((s) => s.state === "not_found");
-  if (found.length) {
-    body.appendChild(
-      el("section", "card", "", [el("h2", "", t("detected")), el("p", "names", found.map((s) => s.name).join(", "))]),
-    );
-  }
-  if (missing.length) {
-    body.appendChild(
-      el("section", "card", "", [
-        el("h2", "", t("not_detected")),
-        el("p", "names", missing.map((s) => s.name).join(", ")),
-        el("p", "hint", t("not_detected_hint")),
-      ]),
-    );
-  }
-
+  const page = el("div", "list page", "", current.page());
   const made = credit();
-  body.appendChild(updatesCard);
-
   const top = el("header", "top", "", [
     button(`‹ ${t("back")}`, "ghost", () => {
       confirmingQuit = false;
       view = "main";
       render();
     }),
-    el("h1", "", t("settings")),
+    el("h1", "", t(current.title)),
   ]);
   const ask = (value: boolean) => () => {
     confirmingQuit = value;
@@ -420,7 +554,7 @@ function settingsView(): HTMLElement {
         ...(made ? [made] : []),
         button(t("quit"), "ghost", ask(true)),
       ]);
-  return el("div", "screen", "", [top, body, footer]);
+  return el("div", "screen", "", [top, el("div", "settings", "", [rail, page]), footer]);
 }
 
 function render(): void {
@@ -473,11 +607,13 @@ window.addEventListener("blur", () => {
     render();
   }
 });
+applyTheme();
 void invoke("set_auto_update", { on: autoUpdate() });
 void getVersion().then((value) => {
   version = value;
   render();
 });
+void invoke("set_hidden_services", { ids: hiddenServices() });
 void invoke("set_show_left", { left: showLeft() });
 void invoke("set_tray_service", { id: trayService() });
 void listen<Snapshot[]>("snapshots", (event) => accept(event.payload));

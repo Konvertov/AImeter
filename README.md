@@ -26,10 +26,12 @@ Working title; the name will change.
 | Codebuff | Codebuff CLI sign-in |
 | OpenRouter | API key |
 | DeepSeek | API key |
+| abliteration.ai | API key |
+| Gemini | sign in once in a window |
 
 ## Privacy
 
-Everything stays on your computer. AImeter talks only to the services themselves, has no server and collects no statistics. Sign-ins of other programs are read, never changed or copied. API keys are kept in the system password store.
+Everything stays on your computer. AImeter talks only to the services themselves, has no server and collects no statistics. Sign-ins of other programs are read, never changed or copied. API keys are kept on your computer only: in the system password store on Windows, in a file only your user can read on macOS.
 
 ## Build
 
