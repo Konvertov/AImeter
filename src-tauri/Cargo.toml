@@ -1,6 +1,6 @@
 [package]
 name = "aimeter"
-version = "0.3.0"
+version = "0.3.1"
 description = "AI usage limits in your tray"
 edition = "2021"
 

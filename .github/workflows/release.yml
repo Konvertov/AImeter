@@ -1,7 +1,9 @@
 name: Release
 
 # Pushing a tag like v0.2.0 builds both platforms, signs the update
-# packages and publishes a release. Installed copies pick it up on their own.
+# packages and publishes the release in the public Konvertov/ai-meter
+# repository (downloads only, no code). Installed copies pick it up there.
+# RELEASES_TOKEN: a token that may write to that public repository.
 on:
   push:
     tags: ["v*"]
@@ -34,10 +36,13 @@ jobs:
       - run: npm ci
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          owner: Konvertov
+          repo: ai-meter
+          releaseCommitish: main
           tagName: ${{ github.ref_name }}
           releaseName: "AI Meter ${{ github.ref_name }}"
           releaseDraft: false

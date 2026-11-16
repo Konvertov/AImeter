@@ -6,7 +6,11 @@
   <title>AI Meter — AI limits next to your clock</title>
   <meta name="description" content="A free app for macOS and Windows that shows how much of your AI limits is left and when they reset. Claude Code, Codex, Cursor, Copilot, Gemini and more.">
   <link rel="icon" href="kvadrik.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=11">
+  <script>
+    // Applied before the page is drawn, so a light choice never flashes dark.
+    try { if (localStorage.getItem("theme") === "light") document.documentElement.dataset.theme = "light"; } catch (e) {}
+  </script>
 </head>
 <body>
 
@@ -18,6 +22,8 @@
     <a href="#privacy" data-t="nav_privacy">Privacy</a>
   </nav>
   <div class="nav-side">
+    <a class="theme-flip github" href="https://github.com/Konvertov/ai-meter" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub"><span class="logo" style="--logo:url(logos/github.svg)"></span></a>
+    <button type="button" class="theme-flip" id="theme-flip"></button>
     <div class="lang" role="group" aria-label="Language">
       <button type="button" data-lang="en">EN</button>
       <button type="button" data-lang="ru">RU</button>
@@ -32,6 +38,7 @@
     <div class="hero-text">
       <p class="eyebrow" data-t="eyebrow">Free · macOS and Windows</p>
       <h1 data-t="hero_title">See your AI limits before you hit them</h1>
+      <p class="hero-sub ru-only" data-t="hero_sub"></p>
       <p class="lead" data-t="hero_lead">AI Meter finds the AI tools you already use and shows how much of each limit is left and when it resets.</p>
       <div class="actions" id="download">
         <a class="button" data-download="mac" href="downloads/AImeter-mac.dmg">
@@ -41,7 +48,7 @@
           <span class="os">Windows</span><span data-t="dl_win">Download for Windows</span>
         </a>
       </div>
-      <p class="fine" data-t="hero_fine">Version 0.2.0 · no account, no sign-up · macOS 11 or newer, Windows 10 or 11</p>
+      <p class="fine" data-t="hero_fine">Version 0.3.0 · no account, no sign-up · macOS 11 or newer, Windows 10 or 11</p>
     </div>
 
     <!-- A drawn copy of the menu bar icon and the app's panel, not a screenshot. -->
@@ -113,12 +120,13 @@
   <section id="services" class="section">
     <h2 data-t="s_title">AI tools it understands</h2>
     <p class="sub" data-t="s_sub">Most are found automatically. A few need an API key or a one-time sign-in.</p>
-    <div class="services" id="service-list"></div>
+    <div id="service-list"></div>
     <p class="fine center" data-t="s_fine">The list grows with every version.</p>
   </section>
 
   <section class="section">
     <h2 data-t="h_title">How it works</h2>
+    <p class="sub ru-only" data-t="h_sub"></p>
     <ol class="steps">
       <li><b data-t="h1_t">Install and start</b><span data-t="h1_p">A small icon appears in the menu bar on Mac or in the tray on Windows.</span></li>
       <li><b data-t="h2_t">It looks around</b><span data-t="h2_p">AI Meter checks which AI tools are signed in on this computer and asks each service for your limits, the same way the tool itself does.</span></li>
@@ -128,6 +136,7 @@
 
   <section id="privacy" class="section">
     <h2 data-t="p_title">Your data stays with you</h2>
+    <p class="sub ru-only" data-t="p_sub"></p>
     <div class="grid two">
       <article><h3 data-t="p1_t">No server of ours</h3><p data-t="p1_p">AI Meter talks only to the AI services themselves. There is nothing in between and nothing is collected.</p></article>
       <article><h3 data-t="p2_t">Sign-ins are only read</h3><p data-t="p2_p">The app reads the sign-in your tools already saved. It never changes it, copies it elsewhere or signs you out.</p></article>
@@ -144,15 +153,21 @@
     </div>
   </section>
 
+  <section class="section cta ru-only">
+    <h2 data-t="cta_title"></h2>
+    <p class="sub" data-t="cta_p"></p>
+    <p class="cta-note" data-t="cta_note"></p>
+  </section>
+
 </main>
 
 <footer class="footer">
-  <span>AI Meter 0.2.0</span>
+  <span>AI Meter 0.3.0</span>
   <a class="tg" href="https://t.me/konvertov" target="_blank" rel="noopener">
     <span class="logo tg-logo" style="--logo:url(logos/telegram.svg)"></span><span>Konvertov</span>
   </a>
 </footer>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

@@ -1,4 +1,26 @@
 :root {
+  /* Dark by default; the visitor can switch to light with the button in the header. */
+  --bg: #0e1014;
+  --surface: #171a21;
+  --text: #f2f4f8;
+  --muted: #9aa3b2;
+  --line: #262a35;
+  --track: #2c3140;
+  --accent: #4fd1a5;
+  --accent-text: #0c1512;
+  --mid: #f0b93a;
+  --panel-bg: #14161c;
+  --panel-card: #1d2029;
+  --panel-line: #2a2e3a;
+  --panel-text: #f2f4f8;
+  --panel-muted: #9aa3b2;
+  --panel-track: #2c3140;
+  --panel-accent: #4fd1a5;
+  --shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
   --bg: #f6f7f9;
   --surface: #ffffff;
   --text: #14161c;
@@ -8,30 +30,8 @@
   --accent: #178f6c;
   --accent-text: #ffffff;
   --mid: #c98a0c;
-  --panel-bg: #14161c;
-  --panel-card: #1d2029;
-  --panel-line: #2a2e3a;
-  --panel-text: #f2f4f8;
-  --panel-muted: #9aa3b2;
-  --panel-track: #2c3140;
-  --panel-accent: #4fd1a5;
   --shadow: 0 30px 70px rgba(20, 22, 28, 0.22);
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e1014;
-    --surface: #171a21;
-    --text: #f2f4f8;
-    --muted: #9aa3b2;
-    --line: #262a35;
-    --track: #2c3140;
-    --accent: #4fd1a5;
-    --accent-text: #0c1512;
-    --mid: #f0b93a;
-    --shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
-  }
+  color-scheme: light;
 }
 
 * {
@@ -670,4 +670,72 @@ article p {
 .ai {
   color: #d97757;
   font-weight: inherit;
+}
+
+/* Russian text comes in several paragraphs and numbered steps. */
+[data-t] {
+  white-space: pre-line;
+}
+
+/* Parts that only the Russian version of the page has. */
+html:not([lang="ru"]) .ru-only {
+  display: none;
+}
+
+.hero-sub {
+  margin-top: 12px;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.service-group {
+  margin-top: 28px;
+  font-size: 17px;
+  font-weight: 660;
+}
+
+.service-group + .services {
+  margin-top: 12px;
+}
+
+.cta {
+  text-align: center;
+}
+
+.cta .cta-note {
+  margin: 14px 0 0;
+  font-weight: 650;
+}
+
+/* The Russian headline is longer; a smaller size keeps it to two lines. */
+html[lang="ru"] h1 {
+  font-size: clamp(28px, 3.3vw, 40px);
+}
+
+/* Sun / moon switch in the header. */
+.theme-flip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--track);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme-flip:hover {
+  color: var(--text);
+}
+
+.theme-flip svg {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-flip.github .logo {
+  width: 18px;
+  height: 18px;
 }
