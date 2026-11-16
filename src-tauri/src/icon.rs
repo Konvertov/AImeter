@@ -118,7 +118,7 @@ pub fn tray_image(percent: Option<f64>, template: bool) -> Image<'static> {
 }
 
 /// "Kvadrik", the square fellow in sunglasses, for the macOS menu bar.
-/// One colour (a template): the glasses, smile and charge cells are cut out
+/// One colour (a template): the glasses and charge cells are cut out
 /// of the body, so the menu bar shows through them.
 pub fn menu_bar_character() -> Image<'static> {
     let (width, height) = (66u32, 72u32);
@@ -197,17 +197,9 @@ pub fn menu_bar_character() -> Image<'static> {
         canvas.stroke_path(&glint, &solid, &round_stroke(22.0), place, None);
     }
 
-    // The smile.
-    let mut smile = PathBuilder::new();
-    smile.move_to(446.0, 584.0);
-    smile.quad_to(518.0, 630.0, 590.0, 576.0);
-    if let Some(smile) = smile.finish() {
-        canvas.stroke_path(&smile, &cut, &round_stroke(26.0), place, None);
-    }
-
-    // Three charge cells on the belly; the fourth is spent.
+    // Three charge cells where a mouth would be; the fourth is spent.
     for index in 0..3 {
-        if let Some(cell) = rect(372.0 + index as f32 * 74.0, 636.0, 58.0, 36.0) {
+        if let Some(cell) = rect(372.0 + index as f32 * 74.0, 584.0, 58.0, 36.0) {
             canvas.fill_path(&cell, &cut, FillRule::Winding, place, None);
         }
     }
@@ -355,14 +347,6 @@ pub fn tray_character(left: Option<f64>) -> Image<'static> {
         }
     }
 
-    // A small smile, higher than in the big logo to leave room for the cells.
-    let mut smile = PathBuilder::new();
-    smile.move_to(462.0, 566.0);
-    smile.quad_to(518.0, 600.0, 574.0, 562.0);
-    if let Some(smile) = smile.finish() {
-        canvas.stroke_path(&smile, &ink, &stroke(20.0), place, None);
-    }
-
     // The charge: four big cells, lit from the left for what is still left.
     let quarters = match left {
         Some(left) if left > 0.0 => ((left / 25.0).ceil() as usize).min(4),
@@ -370,7 +354,7 @@ pub fn tray_character(left: Option<f64>) -> Image<'static> {
     };
     for index in 0..4 {
         let fill = if index < quarters { &lit } else { &spent };
-        if let Some(cell) = rect(318.0 + index as f32 * 100.0, 616.0, 88.0, 74.0) {
+        if let Some(cell) = rect(318.0 + index as f32 * 100.0, 572.0, 88.0, 74.0) {
             canvas.fill_path(&cell, fill, FillRule::Winding, place, None);
         }
     }
