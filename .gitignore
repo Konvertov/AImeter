@@ -3,3 +3,6 @@ dist
 src-tauri/target
 src-tauri/gen
 .DS_Store
+site/downloads/*
+src-tauri/icons/android
+src-tauri/icons/ios

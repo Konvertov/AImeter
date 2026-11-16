@@ -645,3 +645,33 @@ button.link.quiet:hover {
 .service-grid .service-line.clickable:hover {
   opacity: 1;
 }
+
+/* In settings the page sits beside the icon rail: while measuring it must
+   keep its real width (so text wraps as it will), only its height is free. */
+#app.measuring .settings .list.page {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* "AI" in the title takes the orange of the Claude Code mark. */
+.brand-ai {
+  color: #d97757;
+}
+
+.brand-mark {
+  display: inline-flex;
+  width: 19px;
+  height: 21px;
+  flex: none;
+}
+
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* The light/dark switch sits in the top right corner of the main view. */
+.top .theme-flip {
+  margin-left: auto;
+}

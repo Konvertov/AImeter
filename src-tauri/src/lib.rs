@@ -1,3 +1,4 @@
+mod icon;
 mod providers;
 mod secrets;
 mod signin;
@@ -20,6 +21,10 @@ const REFRESH_EVERY: Duration = Duration::from_secs(5 * 60);
 const SERVICE_LIMIT: Duration = Duration::from_secs(30);
 /// How long a service is left alone after it asked us to slow down.
 const SLOW_DOWN_MS: i64 = 20 * 60 * 1000;
+/// Windows draws the panel larger than macOS; there the page is shown at
+/// this share of its size.
+#[cfg(windows)]
+const PANEL_ZOOM: f64 = 0.9;
 
 pub(crate) struct Shared {
     pub(crate) client: reqwest::Client,
@@ -38,6 +43,10 @@ pub(crate) struct Shared {
     pub(crate) auto_update: AtomicBool,
     /// Services the user switched off; they are neither asked nor shown.
     hidden: Mutex<HashSet<String>>,
+    /// The percent the icon was last drawn for (-1 = empty bar, -2 = not drawn yet).
+    /// Only Windows draws the icon; macOS shows text instead.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    icon_percent: AtomicI64,
 }
 
 pub(crate) async fn refresh(app: AppHandle) {
@@ -142,13 +151,19 @@ pub(crate) async fn refresh(app: AppHandle) {
 
 /// The number next to the icon: the tightest main limit across services.
 fn update_tray(app: &AppHandle, snapshots: &[Snapshot]) {
+    // Each service is represented by its first main limit: the session (the
+    // 5-hour window) where it has one. Weekly limits stay in the panel.
     let tightest_of = |only: Option<&str>| {
         snapshots
             .iter()
             .filter(|s| only.is_none_or(|id| s.id == id))
-            .flat_map(|s| s.meters.iter().map(move |m| (s, m)))
-            .filter(|(_, m)| m.primary)
-            .filter_map(|(s, m)| m.used_percent.map(|p| (s, p)))
+            .filter_map(|s| {
+                s.meters
+                    .iter()
+                    .find(|m| m.primary && m.used_percent.is_some())
+                    .and_then(|m| m.used_percent)
+                    .map(|p| (s, p))
+            })
             .max_by(|a, b| a.1.total_cmp(&b.1))
     };
     // The chosen service; if it has nothing to show right now, the tightest of all.
@@ -158,25 +173,37 @@ fn update_tray(app: &AppHandle, snapshots: &[Snapshot]) {
         .and_then(|id| tightest_of(Some(id)))
         .or_else(|| tightest_of(None));
     if let Some(tray) = app.tray_by_id("main") {
-        match tightest {
-            Some((service, used)) => {
-                let percent = if app.state::<Shared>().show_left.load(Ordering::Relaxed) {
-                    100.0 - used
-                } else {
-                    used
-                };
+        let shared = app.state::<Shared>();
+        let shown = tightest.map(|(service, used)| {
+            let percent = if shared.show_left.load(Ordering::Relaxed) { 100.0 - used } else { used };
+            (service, percent)
+        });
+        match shown {
+            Some((service, percent)) => {
+                // In the macOS menu bar the app is "AI 84%": bold letters (a picture)
+                // followed by the number as text.
                 let _ = tray.set_title(Some(format!("{percent:.0}%")));
-                let _ = tray.set_tooltip(Some(format!("AImeter: {} {percent:.0}%", service.name)));
+                let _ = tray.set_tooltip(Some(format!("AI Meter: {} {percent:.0}%", service.name)));
             }
             None => {
                 let _ = tray.set_title(None::<String>);
-                let _ = tray.set_tooltip(Some("AImeter"));
+                let _ = tray.set_tooltip(Some("AI Meter"));
+            }
+        }
+        // Windows cannot show text next to a tray icon, so there the picture
+        // carries the level: Kvadrik's belly cells show what is left.
+        // Redraw only when it changed.
+        #[cfg(not(target_os = "macos"))]
+        {
+            let left = tightest.map(|(_, used)| 100.0 - used);
+            let level = left.map(|left| left.round() as i64).unwrap_or(-1);
+            if shared.icon_percent.swap(level, Ordering::Relaxed) != level {
+                let _ = tray.set_icon(Some(icon::tray_character(left)));
             }
         }
     }
 }
 
-/// Under the menu bar icon on macOS, above the tray icon on Windows.
 fn panel_spot() -> Position {
     if cfg!(target_os = "macos") {
         Position::TrayBottomCenter
@@ -197,6 +224,20 @@ fn fit_panel(app: AppHandle, height: f64) {
     if panel.is_visible().unwrap_or(false) {
         let _ = panel.move_window(panel_spot());
     }
+}
+
+/// Open the panel (never close it), e.g. when the app is started again.
+/// Next to the tray icon if its place is known yet, else above the clock.
+#[cfg(windows)]
+fn show_panel(app: &AppHandle) {
+    let Some(panel) = app.get_webview_window("main") else {
+        return;
+    };
+    if panel.move_window(panel_spot()).is_err() {
+        let _ = panel.move_window(Position::BottomRight);
+    }
+    let _ = panel.show();
+    let _ = panel.set_focus();
 }
 
 fn toggle_panel(app: &AppHandle) {
@@ -329,6 +370,26 @@ pub fn run() {
         .build()
         .expect("http client");
 
+    // `aimeter --icon-dump FILE PERCENT [colour]` writes the tray picture as raw
+    // RGBA bytes, to look at it without starting the app.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(at) = args.iter().position(|arg| arg == "--icon-dump") {
+        let percent = args.get(at + 2).and_then(|p| p.parse::<f64>().ok());
+        let template = args.get(at + 3).map(String::as_str) != Some("colour");
+        let picture = if args.get(at + 3).map(String::as_str) == Some("name") {
+            icon::menu_bar_character()
+        } else if args.get(at + 3).map(String::as_str) == Some("kvadrik") {
+            icon::tray_character(percent)
+        } else {
+            icon::tray_image(percent, template)
+        };
+        if let Some(file) = args.get(at + 1) {
+            let _ = std::fs::write(file, picture.rgba());
+        }
+        println!("{} {}", picture.width(), picture.height());
+        return;
+    }
+
     // `aimeter --json` prints what every service returned and exits.
     // Handy for checking a service without opening the panel.
     if std::env::args().any(|arg| arg == "--json") {
@@ -343,7 +404,15 @@ pub fn run() {
         return;
     }
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows: starting AI Meter while it already runs opens the running
+    // one's panel instead of putting a second Kvadrik into the tray. This
+    // plugin has to come before the others.
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        show_panel(app);
+    }));
+    builder
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Shared {
@@ -357,6 +426,7 @@ pub fn run() {
             tray_service: Mutex::new(None),
             auto_update: AtomicBool::new(true),
             hidden: Mutex::new(HashSet::new()),
+            icon_percent: AtomicI64::new(-2),
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshots,
@@ -376,13 +446,25 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            // Windows draws the same panel noticeably larger than macOS does;
+            // shrink the page a little there (the UI scales its height to match).
+            #[cfg(windows)]
+            if let Some(panel) = app.get_webview_window("main") {
+                let _ = panel.set_zoom(PANEL_ZOOM);
+            }
+
             let refresh_item = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit AImeter", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit AI Meter", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&refresh_item, &quit_item])?;
 
-            TrayIconBuilder::with_id("main")
-                .icon(app.default_window_icon().expect("app icon").clone())
-                .tooltip("AImeter")
+            // macOS: text only ("AI 84%"). Elsewhere: the bubble picture.
+            let tray = TrayIconBuilder::with_id("main");
+            #[cfg(target_os = "macos")]
+            let tray = tray.icon(icon::menu_bar_character()).icon_as_template(true);
+            #[cfg(not(target_os = "macos"))]
+            let tray = tray.icon(icon::tray_character(None));
+            tray
+                .tooltip("AI Meter")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -431,5 +513,5 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running AImeter");
+        .expect("error while running AI Meter");
 }

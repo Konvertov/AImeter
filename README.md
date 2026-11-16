@@ -1,8 +1,8 @@
-# AImeter
+# AI Meter
 
 AI usage limits next to your clock. Free, for Windows and macOS.
 
-AImeter finds the AI tools you are already signed in to on this computer and shows how much of each limit is spent and when it resets. Nothing to type in for tools that keep a sign-in locally; services that work by API key need the key once.
+AI Meter finds the AI tools you are already signed in to on this computer and shows how much of each limit is spent and when it resets. Nothing to type in for tools that keep a sign-in locally; services that work by API key need the key once.
 
 Working title; the name will change.
 
@@ -31,7 +31,7 @@ Working title; the name will change.
 
 ## Privacy
 
-Everything stays on your computer. AImeter talks only to the services themselves, has no server and collects no statistics. Sign-ins of other programs are read, never changed or copied. API keys are kept on your computer only: in the system password store on Windows, in a file only your user can read on macOS.
+Everything stays on your computer. AI Meter talks only to the services themselves, has no server and collects no statistics. Sign-ins of other programs are read, never changed or copied. API keys are kept on your computer only: in the system password store on Windows, in a file only your user can read on macOS.
 
 ## Build
 

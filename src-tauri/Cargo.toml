@@ -1,6 +1,6 @@
 [package]
 name = "aimeter"
-version = "0.2.0"
+version = "0.3.0"
 description = "AI usage limits in your tray"
 edition = "2021"
 
@@ -23,12 +23,14 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 rusqlite = { version = "0.32", features = ["bundled"] }
 dirs = "6"
 base64 = "0.22"
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(windows)'.dependencies]
+tauri-plugin-single-instance = "2.5.5"
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
 [profile.release]

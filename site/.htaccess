@@ -1,0 +1,3 @@
+# This folder is a plain static site; the rules of the parent site do not apply here.
+RewriteEngine Off
+DirectoryIndex index.html

@@ -34,7 +34,7 @@ const words: Record<Lang, Record<string, string>> = {
     quit: "Quit",
     language: "Language",
     api_keys: "API keys",
-    api_keys_hint: "Stored on this computer only. Never sent anywhere except the service itself.",
+    api_keys_hint: "Stored on this computer only.",
     save: "Save",
     remove: "Remove",
     get_key: "Get a key",
@@ -74,17 +74,19 @@ const words: Record<Lang, Record<string, string>> = {
     theme_system: "As system",
     theme_light: "Light",
     theme_dark: "Dark",
+    to_light: "Light mode",
+    to_dark: "Dark mode",
     updates: "Updates",
     updates_auto: "Install automatically",
     updates_off: "Off",
     updates_hint: "New versions are installed quietly while the panel is closed.",
-    quit_question: "Quit AImeter?",
+    quit_question: "Quit AI Meter?",
     cancel: "Cancel",
-    tray_number: "Number next to the icon",
-    tray_auto: "Tightest limit of all",
-    tray_hint: "If the chosen service has nothing to show, the tightest limit is used.",
+    tray_number: "Whose limit to show",
+    tray_auto: "Automatically",
+    tray_hint: "This is the number next to the icon: the session limit. Automatically means the AI tool whose session is closest to its end. Weekly limits are in the panel.",
     signin_services: "Sign in once",
-    signin_hint: "A window opens with the service's own site. Sign in there; AImeter never sees your password.",
+    signin_hint: "A window opens with the service's own site. Sign in there; AI Meter never sees your password.",
     connect: "Connect",
     disconnect: "Disconnect",
     connected: "Connected",
@@ -153,7 +155,7 @@ const words: Record<Lang, Record<string, string>> = {
     quit: "Выйти",
     language: "Язык",
     api_keys: "API-ключи",
-    api_keys_hint: "Хранятся только на этом компьютере. Отправляются только самому сервису.",
+    api_keys_hint: "Хранятся только на этом компьютере.",
     save: "Сохранить",
     remove: "Удалить",
     get_key: "Получить ключ",
@@ -193,17 +195,19 @@ const words: Record<Lang, Record<string, string>> = {
     theme_system: "Как в системе",
     theme_light: "Светлое",
     theme_dark: "Тёмное",
+    to_light: "Светлая тема",
+    to_dark: "Тёмная тема",
     updates: "Обновления",
     updates_auto: "Ставить автоматически",
     updates_off: "Выключено",
     updates_hint: "Новые версии ставятся незаметно, пока панель закрыта.",
-    quit_question: "Выйти из AImeter?",
+    quit_question: "Выйти из AI Meter?",
     cancel: "Отмена",
-    tray_number: "Число у значка",
-    tray_auto: "Самый тесный лимит из всех",
-    tray_hint: "Если у выбранной нейросети нет данных, показывается самый тесный лимит.",
+    tray_number: "Лимит какой нейросети показывать",
+    tray_auto: "Автоматически",
+    tray_hint: "Это число рядом со значком: лимит текущей сессии. «Автоматически» — нейросеть, у которой сессия ближе всего к концу. Недельные лимиты видны в панели.",
     signin_services: "Вход один раз",
-    signin_hint: "Откроется окно с сайтом самого сервиса. Войдите там; пароль AImeter не видит.",
+    signin_hint: "Откроется окно с сайтом самого сервиса. Войдите там; пароль AI Meter не видит.",
     connect: "Подключить",
     disconnect: "Отключить",
     connected: "Подключено",
@@ -372,11 +376,19 @@ export type Theme = "system" | "light" | "dark";
 export function theme(): Theme {
   try {
     const saved = localStorage.getItem("theme");
-    if (saved === "light" || saved === "dark") return saved;
+    if (saved === "light" || saved === "dark" || saved === "system") return saved;
   } catch {
     /* ignore */
   }
-  return "system";
+  // Dark until the user picks otherwise: the panel looks the same everywhere.
+  return "dark";
+}
+
+/** What is on screen now, light or dark, with "system" resolved. */
+export function shownTheme(): "light" | "dark" {
+  const chosen = theme();
+  if (chosen !== "system") return chosen;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 /** Remember the choice and repaint: "system" follows the computer's own setting. */

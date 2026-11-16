@@ -2,8 +2,9 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { author } from "./author";
-import { applyTheme, autoUpdate, clock, hiddenServices, setHiddenServices, mainService, setMainService, duration, lang, setAutoUpdate, setClock, setLang, setShowLeft, setTheme, setTrayService, showLeft, t, theme, timeOfDay, trayService } from "./i18n";
+import { applyTheme, autoUpdate, clock, hiddenServices, setHiddenServices, mainService, setMainService, duration, lang, setAutoUpdate, setClock, setLang, setShowLeft, setTheme, setTrayService, showLeft, shownTheme, t, theme, timeOfDay, trayService } from "./i18n";
 import { logo } from "./logos";
+import kvadrik from "./logos/kvadrik.svg?raw";
 
 interface Meter {
   label: string;
@@ -73,9 +74,13 @@ const ICONS = {
   access: '<circle cx="8" cy="15.5" r="4"/><path d="M10.9 12.6L19.5 4M15.5 8l3 3"/>',
   updates: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/>',
-  settings:
-    '<circle cx="12" cy="12" r="6.4"/><circle cx="12" cy="12" r="2.6"/>' +
-    '<path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M5.4 18.6l2.1-2.1M16.5 7.5l2.1-2.1"/>',
+  // A solid sun with short rays apart from it: unlike the gear's outline.
+  sun:
+    '<circle cx="12" cy="12" r="3.6" fill="currentColor"/>' +
+    '<path d="M12 2.5v1.8M12 19.7v1.8M2.5 12h1.8M19.7 12h1.8M5.3 5.3l1.3 1.3M17.4 17.4l1.3 1.3M5.3 18.7l1.3-1.3M17.4 6.6l1.3-1.3"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  // A gear with real teeth, so it never reads as the sun.
+  settings: '<path d="M19.2 12.9 L21.5 14.4 L20.4 17.1 L17.8 16.5 L16.5 17.8 L17.1 20.4 L14.4 21.5 L12.9 19.2 L11.1 19.2 L9.6 21.5 L6.9 20.4 L7.5 17.8 L6.2 16.5 L3.6 17.1 L2.5 14.4 L4.8 12.9 L4.8 11.1 L2.5 9.6 L3.6 6.9 L6.2 7.5 L7.5 6.2 L6.9 3.6 L9.6 2.5 L11.1 4.8 L12.9 4.8 L14.4 2.5 L17.1 3.6 L16.5 6.2 L17.8 7.5 L20.4 6.9 L21.5 9.6 L19.2 11.1Z"/><circle cx="12" cy="12" r="3"/>',
 };
 
 /** A button that shows a small line drawing instead of a word; the word stays as a tooltip. */
@@ -87,6 +92,14 @@ function iconButton(icon: keyof typeof ICONS, label: string, onClick: () => void
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
     `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[icon]}</svg>`;
   return node;
+}
+
+/** The app's character, Kvadrik, in front of the name. */
+function brandMark(): HTMLElement {
+  const mark = el("span", "brand-mark");
+  mark.setAttribute("aria-hidden", "true");
+  mark.innerHTML = kvadrik;
+  return mark;
 }
 
 function level(percent: number): string {
@@ -291,7 +304,19 @@ function mainView(): HTMLElement {
       }),
     ]),
   ]);
-  return el("div", "screen", "", [el("header", "top", "", [el("h1", "", "AImeter")]), list, footer]);
+  // Sun or moon in the corner: one click between light and dark.
+  const dark = shownTheme() === "dark";
+  const flip = iconButton(dark ? "sun" : "moon", t(dark ? "to_light" : "to_dark"), () => {
+    setTheme(dark ? "light" : "dark");
+    render();
+  });
+  flip.classList.add("theme-flip");
+  const top = el("header", "top", "", [
+    brandMark(),
+    el("h1", "", "", [el("span", "brand-ai", "AI"), document.createTextNode(" Meter")]),
+    flip,
+  ]);
+  return el("div", "screen", "", [top, list, footer]);
 }
 
 function keyRow(snap: Snapshot): HTMLElement {
@@ -500,7 +525,7 @@ function updatesPage(): HTMLElement[] {
       }),
       el("p", "hint picker-hint", t("updates_hint")),
     ]),
-    block("about", [el("p", "names", `AImeter ${version}`)]),
+    block("about", [el("p", "names", `AI Meter ${version}`)]),
   ];
 }
 
@@ -550,7 +575,7 @@ function settingsView(): HTMLElement {
         ]),
       ])
     : el("footer", "footer", "", [
-        el("span", "stamp", `AImeter ${version}`),
+        el("span", "stamp", `AI Meter ${version}`),
         ...(made ? [made] : []),
         button(t("quit"), "ghost", ask(true)),
       ]);
@@ -569,19 +594,63 @@ function render(): void {
 
 let fittedHeight = 0;
 
-/** Ask the window to be exactly as tall as the content (within limits). */
-function fit(): void {
+/** On Windows the page is drawn smaller (see PANEL_ZOOM in lib.rs), so the
+ *  window needs that share of the page's height. */
+const ZOOM = navigator.userAgent.includes("Windows") ? 0.9 : 1;
+/** The tallest the panel gets, in page pixels; longer pages scroll. */
+const MAX_HEIGHT = 600;
+
+/** The page's natural height, as if the window had no limit. */
+function measure(): number {
   const screen = root.firstElementChild;
-  if (!screen) return;
+  if (!screen) return 0;
   root.classList.add("measuring");
   const natural = Math.ceil(screen.getBoundingClientRect().height);
   root.classList.remove("measuring");
-  const height = Math.min(600, Math.max(170, natural));
+  return natural;
+}
+
+/** The main view's height the last time it was shown. */
+let mainHeight = 0;
+/** Settings never get shorter than this, so their pages have room. */
+const SETTINGS_MIN = 430;
+
+/** Ask the window to be exactly as tall as the content (within limits).
+ *  Settings keep one height for all their tabs (the main view's, but not
+ *  less than SETTINGS_MIN), so neither opening them nor switching tabs makes
+ *  the window jump; a longer tab scrolls inside. */
+function fit(): void {
+  let natural: number;
+  if (view === "settings") {
+    natural = Math.max(mainHeight, SETTINGS_MIN);
+  } else {
+    natural = measure();
+    mainHeight = natural;
+  }
+  const height = Math.round(Math.min(MAX_HEIGHT, Math.max(170, natural + 2)) * ZOOM);
   if (height !== fittedHeight) {
     fittedHeight = height;
     void invoke("fit_panel", { height });
+  } else {
+    requestAnimationFrame(topUp);
   }
 }
+
+/** After the window took its new size, the engine can still lay the page
+ *  out a few pixels taller than measured; grow by what is missing instead
+ *  of showing a scrollbar. */
+function topUp(): void {
+  const list = root.querySelector<HTMLElement>(".list");
+  const ceiling = Math.round(MAX_HEIGHT * ZOOM);
+  // Settings keep their fixed height and scroll instead.
+  if (!list || view === "settings" || fittedHeight >= ceiling) return;
+  const missing = list.scrollHeight - list.clientHeight;
+  if (missing > 0 && missing < 80) {
+    fittedHeight = Math.min(ceiling, fittedHeight + Math.ceil(missing * ZOOM) + 1);
+    void invoke("fit_panel", { height: fittedHeight });
+  }
+}
+window.addEventListener("resize", () => requestAnimationFrame(topUp));
 
 async function refresh(): Promise<void> {
   refreshing = true;
