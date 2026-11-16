@@ -22,6 +22,7 @@
   <a href="#features">Features</a> ·
   <a href="#supported-ai-tools">Supported tools</a> ·
   <a href="#privacy">Privacy</a> ·
+  <a href="#code-signing-policy">Code signing</a> ·
   <a href="#build-from-source">Build</a> ·
   <a href="#по-русски">По-русски</a>
 </p>
@@ -44,6 +45,8 @@ AI Meter finds the AI tools you already use — Claude Code, Codex, Cursor, GitH
 | Windows 10 or 11 | `AI.Meter_*_x64-setup.exe` | Run the installer. If you see “Windows protected your PC”, click **More info → Run anyway**. Installs for your user only, no admin rights needed. |
 
 New versions install themselves, quietly, while the panel is closed.
+
+To remove AI Meter: on Windows, Settings → Apps → AI Meter → Uninstall; on macOS, quit it from the panel and move it from Applications to the Trash.
 
 ## Features
 
@@ -90,6 +93,8 @@ The list grows with every version.
 - **Keys stay on your computer.** API keys you add are kept locally: in the system credential store on Windows, in a file only your user can read on macOS.
 - **Open source.** Every line is here to check.
 
+Full details, including every service AI Meter connects to: [privacy policy](PRIVACY.md).
+
 ## Build from source
 
 Needs [Node.js](https://nodejs.org) 22+ and [Rust](https://rustup.rs) stable. On Windows also the Visual Studio Build Tools with the C++ workload.
@@ -114,6 +119,19 @@ Useful while working on it:
 - `AIMETER_DEMO=3` shows a preview with three services.
 
 Bug reports and ideas are welcome in [Issues](https://github.com/Konvertov/AImeter/issues).
+
+## Code signing policy
+
+Windows releases are signed through the SignPath Foundation program for open-source projects (application in review; until it is approved, builds are unsigned).
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)
+
+- Committers and reviewers: [Konvertov](https://github.com/Konvertov)
+- Approvers: [Konvertov](https://github.com/Konvertov)
+
+Every release is built from this repository by the [release workflow](.github/workflows/release.yml) on GitHub Actions; nothing is built or signed on a personal computer. Each signing request is approved by hand.
+
+Privacy policy: this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. It only asks the AI services you use for your own limits and checks GitHub for updates — see the [privacy policy](PRIVACY.md).
 
 ## License
 
