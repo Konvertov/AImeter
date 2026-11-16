@@ -525,7 +525,12 @@ function updatesPage(): HTMLElement[] {
       }),
       el("p", "hint picker-hint", t("updates_hint")),
     ]),
-    block("about", [el("p", "names", `AI Meter ${version}`)]),
+    // The legal notices the GPL asks an interactive program to show, with the author link.
+    block("about", [
+      el("p", "names", `AI Meter ${version}`),
+      el("p", "hint", t("legal")),
+      ...(credit() ? [credit() as HTMLElement] : []),
+    ]),
   ];
 }
 
