@@ -9,6 +9,9 @@
   --low: #1f9d78;
   --mid: #d99a12;
   --high: #d9483b;
+  --chart: #5b6ee1;
+  --badge-bg: #eceef3;
+  --badge-fg: #3b4252;
   color-scheme: light dark;
 }
 
@@ -25,6 +28,9 @@
     --low: #4fd1a5;
     --mid: #f0b93a;
     --high: #f26b5e;
+    --chart: #8b9cff;
+    --badge-bg: #2c3140;
+    --badge-fg: #d6dbe6;
     color-scheme: dark;
   }
 }
@@ -41,6 +47,9 @@
   --low: #4fd1a5;
   --mid: #f0b93a;
   --high: #f26b5e;
+  --chart: #8b9cff;
+  --badge-bg: #2c3140;
+  --badge-fg: #d6dbe6;
   color-scheme: dark;
 }
 
@@ -131,9 +140,8 @@ h2 {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--badge-fg);
+  background: var(--badge-bg);
   border-radius: 999px;
   padding: 2px 10px;
 }
@@ -460,8 +468,8 @@ button.credit-link .logo {
   flex: 1;
   min-height: 1px;
   border-radius: 2px 2px 0 0;
-  background: var(--accent);
-  opacity: 0.55;
+  background: var(--chart);
+  opacity: 0.5;
 }
 
 .column.today,
