@@ -42,5 +42,8 @@ pub async fn fetch() -> Result<Data, Fail> {
     if data.meters.is_empty() {
         return Err(Fail::NotFound);
     }
+    if paid(&data.plan) {
+        data.billing = Billing::renews(cycle_end);
+    }
     Ok(data)
 }

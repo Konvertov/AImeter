@@ -6,6 +6,32 @@ use super::*;
 use crate::secrets;
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
+const PROFILE_URL: &str = "https://api.anthropic.com/api/oauth/profile";
+
+/// The subscription start date changes rarely: ask for it at most every 6 hours.
+static STARTED: std::sync::Mutex<Option<(i64, Option<i64>)>> = std::sync::Mutex::new(None);
+
+/// When the paid subscription started, from the account profile.
+async fn subscription_start(client: &reqwest::Client, token: &str) -> Option<i64> {
+    if let Some((asked, start)) = *STARTED.lock().ok()? {
+        if now_ms() - asked < 6 * HOUR * 1000 {
+            return start;
+        }
+    }
+    let profile = send_json(
+        client
+            .get(PROFILE_URL)
+            .bearer_auth(token)
+            .header("anthropic-beta", "oauth-2025-04-20"),
+    )
+    .await
+    .ok()?;
+    let org = &profile["organization"];
+    let active = matches!(org["subscription_status"].as_str(), Some("active") | Some("past_due"));
+    let start = if active { org["subscription_created_at"].as_str().and_then(iso_ms) } else { None };
+    *STARTED.lock().ok()? = Some((now_ms(), start));
+    start
+}
 
 fn saved_login() -> Option<String> {
     if let Some(text) = secrets::system_secret("Claude Code-credentials") {
@@ -83,6 +109,13 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
         } else {
             Meter::text("extra_usage", dollars(spent))
         });
+    }
+    // Claude does not tell the next charge date, only when the subscription
+    // started; monthly plans renew on the same day each month.
+    if paid(&data.plan) {
+        if let Some(start) = subscription_start(client, token).await {
+            data.billing = next_monthly(start).map(|at| Billing { at, estimate: true, ends: false });
+        }
     }
     Ok(data)
 }

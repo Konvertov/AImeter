@@ -33,6 +33,7 @@ interface Snapshot {
   plan: string | null;
   account: string | null;
   meters: Meter[];
+  billing: { at: number; estimate: boolean; ends: boolean } | null;
   stats: Stats | null;
   fetched_at: number;
   key_based: boolean;
@@ -211,6 +212,22 @@ function statsBlock(stats: Stats): HTMLElement {
   return block;
 }
 
+/** "Renews Dec 5 · in 18d": when the paid period ends. */
+function billingRow(billing: NonNullable<Snapshot["billing"]>): HTMLElement {
+  const date = new Date(billing.at).toLocaleDateString(lang() === "ru" ? "ru-RU" : "en-US", {
+    day: "numeric",
+    month: "short",
+  });
+  const left = billing.at - Date.now();
+  const days = Math.ceil(left / 86400000);
+  const soon = days <= 3;
+  const when = left > 86400000 ? `${t("billing_in")} ${duration(left).split(" ")[0]}` : `${t("billing_in")} ${duration(left)}`;
+  const text = `${t(billing.ends ? "ends_on" : "renews_on")} ${billing.estimate ? "≈ " : ""}${date} · ${when}`;
+  const row = el("div", billing.ends && soon ? "billing ending" : "billing", text);
+  if (billing.estimate) row.title = t("billing_estimate");
+  return row;
+}
+
 /** Cards the user opened or closed by hand: card key -> open? */
 const opened = new Map<string, boolean>();
 
@@ -233,6 +250,7 @@ function card(snap: Snapshot, key: string, isMain: boolean): HTMLElement {
         : t(snap.state === "expired" && snap.connect ? "state_expired_connect" : `state_${snap.state}`);
     node.appendChild(el("div", "notice", text));
   }
+  if (snap.state === "ok" && snap.billing) node.appendChild(billingRow(snap.billing));
   // Always visible: the main limits (or the first line when there are none).
   const primary = snap.meters.filter((m) => m.primary);
   const always = primary.length ? primary : snap.meters.slice(0, 1);

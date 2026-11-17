@@ -59,6 +59,16 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
             .or_else(|| find("displayName"))
             .and_then(Value::as_str)
             .map(title_case);
+        // Stripe-style period end, when the answer carries one.
+        let end = ["currentPeriodEnd", "current_period_end", "renewsAt", "periodEnd"]
+            .iter()
+            .find_map(|key| find(key).and_then(moment_ms));
+        if let Some(mut billing) = Billing::renews(end) {
+            billing.ends = ["cancelAtPeriodEnd", "cancel_at_period_end"]
+                .iter()
+                .any(|key| find(key).and_then(Value::as_bool) == Some(true));
+            data.billing = Some(billing);
+        }
     }
     if data.meters.is_empty() {
         return Err(Fail::Other("unexpected response".into()));

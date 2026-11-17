@@ -393,6 +393,17 @@ button.credit-link .logo {
   color: var(--muted);
 }
 
+.billing {
+  margin: -2px 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.billing.ending {
+  color: var(--mid);
+}
+
 .meter-warning {
   margin-top: 2px;
   font-size: 11px;

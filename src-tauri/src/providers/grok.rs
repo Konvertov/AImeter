@@ -50,5 +50,8 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
             .and_then(Value::as_str)
             .map(String::from);
     }
+    if paid(&data.plan) {
+        data.billing = Billing::renews(resets);
+    }
     Ok(data)
 }

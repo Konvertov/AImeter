@@ -94,5 +94,8 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     if data.meters.is_empty() {
         return Err(Fail::Other("unexpected response".into()));
     }
+    if paid(&data.plan) {
+        data.billing = Billing::renews(resets);
+    }
     Ok(data)
 }

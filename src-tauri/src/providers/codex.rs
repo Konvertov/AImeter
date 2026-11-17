@@ -59,6 +59,14 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
     if let Some(count) = number(&body["rate_limit_reset_credits"]["available_count"]).filter(|c| *c > 0.0) {
         data.meters.push(Meter::text("resets_available", format!("{count:.0}")));
     }
+    // The ChatGPT sign-in names the day the paid subscription runs until.
+    if paid(&data.plan) {
+        let until = tokens["id_token"]
+            .as_str()
+            .and_then(token_claims)
+            .and_then(|claims| moment_ms(&claims["https://api.openai.com/auth"]["chatgpt_subscription_active_until"]));
+        data.billing = Billing::renews(until);
+    }
     Ok(data)
 }
 

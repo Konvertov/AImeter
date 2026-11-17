@@ -95,6 +95,44 @@ pub struct Data {
     /// Signed-in account (e-mail), when the saved sign-in tells it.
     pub account: Option<String>,
     pub meters: Vec<Meter>,
+    pub billing: Option<Billing>,
+}
+
+/// When the paid period ends: the next charge, or the last day of a
+/// cancelled subscription.
+#[derive(Serialize, Clone, Debug)]
+pub struct Billing {
+    /// Unix milliseconds.
+    pub at: i64,
+    /// Worked out from the start date, not reported by the service.
+    pub estimate: bool,
+    /// The subscription is cancelled and simply runs out at `at`.
+    pub ends: bool,
+}
+
+impl Billing {
+    pub fn renews(at: Option<i64>) -> Option<Self> {
+        at.filter(|at| *at > now_ms()).map(|at| Billing { at, estimate: false, ends: false })
+    }
+}
+
+/// A paid plan: free and trial plans have no charge to remind about.
+pub fn paid(plan: &Option<String>) -> bool {
+    plan.as_deref().map_or(false, |plan| {
+        let plan = plan.to_lowercase();
+        !["free", "trial", "hobby"].iter().any(|word| plan.contains(word))
+    })
+}
+
+/// The first monthly anniversary of `start` that is still ahead.
+pub fn next_monthly(start: i64) -> Option<i64> {
+    use chrono::{Months, TimeZone};
+    let first = chrono::Utc.timestamp_millis_opt(start).single()?;
+    let now = now_ms();
+    (1..=1200u32)
+        .map(|n| first.checked_add_months(Months::new(n)).map(|d| d.timestamp_millis()))
+        .find(|at| at.map_or(true, |at| at > now))
+        .flatten()
 }
 
 /// Why a service has nothing to show.
@@ -121,6 +159,7 @@ pub struct Snapshot {
     pub plan: Option<String>,
     pub account: Option<String>,
     pub meters: Vec<Meter>,
+    pub billing: Option<Billing>,
     /// Token counts from local logs, for services that keep such logs.
     pub stats: Option<claude_logs::Stats>,
     pub fetched_at: i64,
@@ -203,6 +242,7 @@ fn stand_in(info: &'static Info, state: &str, message: Option<String>) -> Snapsh
         plan: None,
         account: None,
         meters: vec![],
+        billing: None,
         stats: None,
         fetched_at: now_ms(),
         key_based: info.key_env.is_some(),
@@ -247,6 +287,7 @@ pub async fn snapshot(info: &'static Info, client: &reqwest::Client) -> Snapshot
         plan: None,
         account: None,
         meters: vec![],
+        billing: None,
         stats: None,
         fetched_at: now_ms(),
         key_based: info.key_env.is_some(),
@@ -259,6 +300,7 @@ pub async fn snapshot(info: &'static Info, client: &reqwest::Client) -> Snapshot
             snap.plan = data.plan;
             snap.account = data.account;
             snap.meters = data.meters;
+            snap.billing = data.billing;
         }
         Err(Fail::NotFound) => snap.state = "not_found".into(),
         Err(Fail::Expired) => snap.state = "expired".into(),
@@ -435,4 +477,14 @@ pub fn token_email(token: &str) -> Option<String> {
         .ok()?;
     let claims: Value = serde_json::from_slice(&bytes).ok()?;
     claims["email"].as_str().map(String::from)
+}
+
+/// Everything written inside a sign-in token, as JSON.
+pub fn token_claims(token: &str) -> Option<Value> {
+    use base64::Engine;
+    let middle = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(middle.trim_end_matches('='))
+        .ok()?;
+    serde_json::from_slice(&bytes).ok()
 }
