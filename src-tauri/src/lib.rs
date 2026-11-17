@@ -106,6 +106,7 @@ pub(crate) async fn refresh(app: AppHandle) {
                         new.meters = old.meters;
                         new.plan = old.plan;
                         new.account = old.account;
+                        new.billing = old.billing;
                         new.fetched_at = old.fetched_at;
                     }
                 }

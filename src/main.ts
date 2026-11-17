@@ -250,7 +250,8 @@ function card(snap: Snapshot, key: string, isMain: boolean): HTMLElement {
         : t(snap.state === "expired" && snap.connect ? "state_expired_connect" : `state_${snap.state}`);
     node.appendChild(el("div", "notice", text));
   }
-  if (snap.state === "ok" && snap.billing) node.appendChild(billingRow(snap.billing));
+  // Also with a notice on top: the numbers below are then the last good ones.
+  if (snap.billing && snap.meters.length) node.appendChild(billingRow(snap.billing));
   // Always visible: the main limits (or the first line when there are none).
   const primary = snap.meters.filter((m) => m.primary);
   const always = primary.length ? primary : snap.meters.slice(0, 1);
