@@ -598,6 +598,13 @@ button.danger {
   font-weight: 600;
 }
 
+/* A long name gets cut with "…" instead of running under the buttons. */
+.service-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .service-name .account {
   font-weight: 400;
   max-width: none;
