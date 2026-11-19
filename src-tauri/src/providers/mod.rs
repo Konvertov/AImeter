@@ -357,6 +357,11 @@ pub async fn send_json(request: reqwest::RequestBuilder) -> Result<Value, Fail> 
         .send()
         .await
         .map_err(|e| Fail::Other(if e.is_timeout() { "timeout".into() } else { "network".into() }))?;
+    send_json_response(response).await
+}
+
+/// The same reading of an answer, for a request a service sent itself.
+pub async fn send_json_response(response: reqwest::Response) -> Result<Value, Fail> {
     let code = response.status().as_u16();
     match code {
         200..=299 => response
