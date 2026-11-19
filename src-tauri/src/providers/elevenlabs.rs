@@ -28,7 +28,10 @@ pub async fn fetch(client: &reqwest::Client) -> Result<Data, Fail> {
 
     let used = number(&body["character_count"]).ok_or(Fail::Other("unexpected response".into()))?;
     let limit = number(&body["character_limit"]).unwrap_or(0.0);
-    let resets = moment_ms(&body["next_character_count_reset_unix"]);
+    // The service sometimes still reports the reset that has just passed;
+    // the credits renew monthly, so step on to the next one.
+    let resets = moment_ms(&body["next_character_count_reset_unix"])
+        .and_then(|at| if at > now_ms() { Some(at) } else { next_monthly(at) });
 
     let mut data = Data {
         plan: body["tier"].as_str().map(|tier| title_case(&tier.replace('_', " "))),
