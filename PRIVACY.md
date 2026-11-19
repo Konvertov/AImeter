@@ -11,7 +11,7 @@ your own limits, and to GitHub for updates:
 
 | Connection | When | What is sent |
 | --- | --- | --- |
-| The AI service whose limits are shown (for example `api.anthropic.com` for Claude Code, `chatgpt.com` for Codex, `api2.cursor.sh` for Cursor, `api.github.com` for GitHub Copilot, `openrouter.ai`, `api.deepseek.com`) | Every few minutes and when you press Refresh, only for tools found signed in on this computer or that you connected yourself | The sign-in or API key that tool or you already gave it, exactly as the tool itself sends it. The answer (your limits) is shown in the panel and kept only in memory. |
+| The AI service whose limits are shown (for example `api.anthropic.com` for Claude Code, `chatgpt.com` for Codex, `api2.cursor.sh` for Cursor, `api.github.com` for GitHub Copilot, `openrouter.ai`, `api.deepseek.com`, `api.z.ai` or `open.bigmodel.cn`, `api.elevenlabs.io`) | Every few minutes and when you press Refresh, only for tools found signed in on this computer or that you connected yourself | The sign-in or API key that tool or you already gave it, exactly as the tool itself sends it. The answer (your limits) is shown in the panel and kept only in memory. |
 | `gemini.google.com` | Only after you choose to sign in to Gemini inside AI Meter | Your Gemini web session, to read your limits |
 | `github.com` (releases of Konvertov/ai-meter) | About once every few hours | A request for the newest version number; new versions are downloaded from there |
 

@@ -93,6 +93,8 @@ const SERVICES = [
   ["OpenRouter", "openrouter", "#6467F2", "key"],
   ["abliteration.ai", "abliteration", "", "key"],
   ["DeepSeek", "deepseek", "#4D6BFE", "key"],
+  ["Z.ai", "", "", "key"],
+  ["ElevenLabs", "", "", "key"],
 ];
 const HOW_EN = { auto: "found automatically", key: "by API key", signin: "one-time sign-in" };
 

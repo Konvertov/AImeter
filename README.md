@@ -83,6 +83,8 @@ To remove AI Meter: on Windows, Settings → Apps → AI Meter → Uninstall; on
 | OpenRouter | API key |
 | DeepSeek | API key |
 | abliteration.ai | API key |
+| Z.ai (GLM Coding Plan) | API key |
+| ElevenLabs | API key |
 
 The list grows with every version.
 

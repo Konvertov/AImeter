@@ -17,6 +17,7 @@ mod cursor;
 mod deepseek;
 pub mod gemini;
 mod devin;
+mod elevenlabs;
 mod grok;
 mod jetbrains;
 mod kimi;
@@ -24,6 +25,7 @@ mod kiro;
 mod opencode_go;
 mod openrouter;
 mod windsurf;
+mod zai;
 
 /// One bar (or one line of text) on a service card.
 #[derive(Serialize, Clone, Debug)]
@@ -217,6 +219,20 @@ pub const ALL: &[Info] = &[
         key_url: Some("https://platform.deepseek.com/api_keys"),
         connect: false,
     },
+    Info {
+        id: "zai",
+        name: "Z.ai",
+        key_env: Some("ZAI_API_KEY"),
+        key_url: Some("https://z.ai/manage-apikey/apikey-list"),
+        connect: false,
+    },
+    Info {
+        id: "elevenlabs",
+        name: "ElevenLabs",
+        key_env: Some("ELEVENLABS_API_KEY"),
+        key_url: Some("https://elevenlabs.io/app/settings/api-keys"),
+        connect: false,
+    },
 ];
 
 pub fn info(id: &str) -> Option<&'static Info> {
@@ -271,6 +287,8 @@ pub async fn snapshot(info: &'static Info, client: &reqwest::Client) -> Snapshot
         "codebuff" => codebuff::fetch(client).await,
         "openrouter" => openrouter::fetch(client).await,
         "deepseek" => deepseek::fetch(client).await,
+        "zai" => zai::fetch(client).await,
+        "elevenlabs" => elevenlabs::fetch(client).await,
         "abliteration" => abliteration::fetch(client).await,
         _ => Err(Fail::NotFound),
     };
